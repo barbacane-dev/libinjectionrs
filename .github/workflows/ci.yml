@@ -20,6 +20,10 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Build the C harness
+        # benches/ and fuzz/ build scripts expect the harness objects to exist.
+        # comparison-bin builds it itself, so its test also works standalone.
+        run: make -C ffi-harness
       - name: Lints
         run: cargo clippy --workspace --all-targets
       - name: Unit tests
@@ -50,6 +54,10 @@ jobs:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@nightly
       - uses: Swatinem/rust-cache@v2
+      - name: Build the C harness
+        # benches/ and fuzz/ build scripts expect the harness objects to exist.
+        # comparison-bin builds it itself, so its test also works standalone.
+        run: make -C ffi-harness
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
       # Short by design: enough to catch a regression on every pull request,
