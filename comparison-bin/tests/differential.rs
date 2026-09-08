@@ -6,9 +6,9 @@
 //! compares verdicts and fingerprints over libinjection's own corpus, so a
 //! behavioural regression fails `cargo test`.
 //!
-//! Known divergences are declared in [`KNOWN_SQLI_DIVERGENCES`] and
-//! [`KNOWN_XSS_DIVERGENCES`] as classes, each naming the construct that causes
-//! it and why. Anything outside those classes fails. That keeps the suite green
+//! Known divergences are declared in `known_divergences.rs` at the repository
+//! root, shared with the fuzz targets, as classes each naming the construct
+//! that causes it and why. Anything outside those classes fails. That keeps the suite green
 //! today while making a new divergence impossible to introduce quietly, and a
 //! class that gets fixed has to be removed rather than left to excuse future
 //! regressions.
@@ -21,67 +21,8 @@ use std::path::{Path, PathBuf};
 
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
-/// A class of input that is known to diverge, and why.
-///
-/// Keyed by the construct that causes it rather than by individual inputs. A
-/// list of literal strings would need every long payload transcribed exactly,
-/// and it would not say what the defect is. Naming the class means fixing the
-/// defect retires the whole entry at once.
-struct KnownDivergence {
-    /// Substring, matched case-insensitively, that identifies the class.
-    marker: &'static str,
-    /// Why these diverge.
-    reason: &'static str,
-}
-
-/// SQLi divergences: SQL keywords of three or more words are not folded into a
-/// single keyword token.
-///
-/// Two-word keywords fold correctly on their own (`into outfile` fingerprints
-/// `k` in both implementations), and every intermediate prefix is present in
-/// both keyword tables (`LOCK IN`, `LOCK IN SHARE`, `LOCK IN SHARE MODE`), so
-/// the defect is in chaining the merge rather than in the data. Fingerprints
-/// show it directly:
-///
-/// | input | C | Rust |
-/// |---|---|---|
-/// | `LOCK IN SHARE MODE` | `k` | `nnnn` |
-/// | `x IN BOOLEAN MODE` | `nk` | `nnn` |
-/// | `1 into outfile 'asd'` | `1ks` | `sns` |
-///
-/// Every verdict divergence in this class is a false negative, so each is a
-/// missed detection. `INTO OUTFILE` is a file-write primitive.
-const KNOWN_SQLI_DIVERGENCES: &[KnownDivergence] = &[
-    KnownDivergence {
-        marker: "into outfile",
-        reason: "multi-word keyword INTO OUTFILE is not folded when followed by a string",
-    },
-    KnownDivergence {
-        marker: "lock in share mode",
-        reason: "four-word keyword LOCK IN SHARE MODE is not folded",
-    },
-    KnownDivergence {
-        marker: "in boolean mode",
-        reason: "three-word keyword IN BOOLEAN MODE is not folded",
-    },
-];
-
-/// XSS divergences: whitespace or a control byte between an attribute name and
-/// its `=`, as in `<img src=x onerror%09="alert(1)">`.
-///
-/// The C library treats the separator as part of the attribute and flags the
-/// input; this port does not. Every one is a false negative, and this is a
-/// standard attribute-separator evasion.
-const KNOWN_XSS_DIVERGENCES: &[KnownDivergence] = &[KnownDivergence {
-    marker: "onerror%",
-    reason: "a separator between attribute name and '=' is not recognised",
-}];
-
-/// Which known class an input belongs to, if any.
-fn known_class<'a>(input: &str, classes: &'a [KnownDivergence]) -> Option<&'a KnownDivergence> {
-    let lower = input.to_ascii_lowercase();
-    classes.iter().find(|c| lower.contains(c.marker))
-}
+// Known divergences live in one place, shared with the fuzz targets.
+include!("../../known_divergences.rs");
 
 fn c_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -365,4 +306,45 @@ fn neither_detector_panics_on_adversarial_input() {
 
 fn truncate(s: &str) -> String {
     s.chars().take(120).collect()
+}
+
+/// Pins the NUL-in-`$`-token class with its minimal case, because the text
+/// corpus does not contain NUL bytes and only the fuzzer reaches it otherwise.
+///
+/// Asserts the divergence still exists. When it is fixed this test fails,
+/// which is the signal to remove [`is_known_nul_divergence`] rather than leave
+/// it excusing future regressions.
+#[test]
+fn nul_in_dollar_token_still_diverges() {
+    // Without the NUL the two implementations agree.
+    let (c_is, c_fp) = c_sqli(b"'$T");
+    let rust = libinjectionrs::detect_sqli(b"'$T");
+    let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+    assert_eq!(
+        (rust.is_injection(), rust_fp.as_str()),
+        (c_is, c_fp.as_str()),
+        "'$T should agree; the NUL is what causes the divergence"
+    );
+
+    // With it, C emits a number token where this port emits a bareword.
+    let (c_is, c_fp) = c_sqli(b"'$\0T");
+    let rust = libinjectionrs::detect_sqli(b"'$\0T");
+    let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+    assert_eq!(c_fp, "s1n", "C's fingerprint for '$\\0T changed");
+    assert_eq!(
+        rust_fp, "snn",
+        "this port's fingerprint for '$\\0T changed; if it is now s1n the class \
+         is fixed, so delete is_known_nul_divergence and this test"
+    );
+    let _ = c_is;
+
+    // Which turns a detected injection into a missed one.
+    let (c_is, _) = c_sqli(b"T'$\0T#");
+    let rust_is = libinjectionrs::detect_sqli(b"T'$\0T#").is_injection();
+    assert!(c_is, "C should flag T'$\\0T# as an injection");
+    assert!(
+        !rust_is,
+        "this port now flags T'$\\0T# too, so the class is fixed: delete \
+         is_known_nul_divergence and this test"
+    );
 }
