@@ -148,11 +148,13 @@ fn compare_sqli_single(input: &str, flags: i32) -> Result<SqliComparison> {
     };
     
     let match_result = rust_sqli_result.is_injection == c_result.is_injection;
-    let match_fingerprint = if rust_sqli_result.is_injection && c_result.is_injection {
-        rust_sqli_result.fingerprint.as_ref().map_or(false, |fp| fp == &c_result.fingerprint)
-    } else {
-        true // Both safe, fingerprint doesn't matter
-    };
+    // Compare fingerprints whenever either side produced one. Gating this on
+    // both sides reporting an injection meant it read as agreement on exactly
+    // the inputs where the two implementations disagree, which is the only
+    // case worth looking at. For `1 into outfile 'asd'` C fingerprints `1ks`
+    // and Rust `sns`, and this field used to report a match.
+    let rust_fp = rust_sqli_result.fingerprint.clone().unwrap_or_default();
+    let match_fingerprint = rust_fp == c_result.fingerprint;
     
     Ok(SqliComparison {
         input: input.to_string(),

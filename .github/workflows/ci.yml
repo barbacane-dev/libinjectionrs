@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Build, lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Lints
+        run: cargo clippy --workspace --all-targets
+      - name: Unit tests
+        run: cargo test --workspace
+
+  differential:
+    name: Differential against the C library
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The port's whole correctness claim is agreement with the C library, so
+      # this is the job that matters. It compiles the C sources through the FFI
+      # harness and compares verdicts and fingerprints over libinjection's own
+      # corpus of roughly 163,000 inputs.
+      - name: Compare verdicts and fingerprints over the full corpus
+        run: cargo test --release -p libinjection-comparison --test differential -- --nocapture
+
+  fuzz:
+    name: Differential fuzzing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      # Short by design: enough to catch a regression on every pull request,
+      # not a replacement for a long campaign. The corpus is committed, so runs
+      # build on each other.
+      - name: Fuzz SQLi differential
+        run: cargo fuzz run fuzz_differential_sqli -- -max_total_time=120
+      - name: Fuzz XSS differential
+        run: cargo fuzz run fuzz_differential_xss -- -max_total_time=120

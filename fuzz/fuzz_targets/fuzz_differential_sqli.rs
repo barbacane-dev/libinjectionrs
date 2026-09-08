@@ -1,17 +1,19 @@
 #![no_main]
 use libfuzzer_sys::fuzz_target;
 use libinjectionrs::detect_sqli as rust_detect_sqli;
-use std::ffi::CString;
+use std::os::raw::c_char;
 
 // Include the generated bindings
 include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 fn call_c_sqli(input: &[u8]) -> Result<bool, ()> {
-    let c_input = CString::new(input).map_err(|_| ())?;
-    
+    // The harness takes an explicit length, so the input does not need to be
+    // NUL-terminated and may contain NUL bytes. Going through CString meant
+    // every input containing a NUL was skipped, which is a shape a WAF
+    // receives routinely and a classic filter evasion.
     unsafe {
         let result = harness_detect_sqli(
-            c_input.as_ptr(),
+            input.as_ptr() as *const c_char,
             input.len(),
             0,
         );
@@ -21,11 +23,6 @@ fn call_c_sqli(input: &[u8]) -> Result<bool, ()> {
 }
 
 fuzz_target!(|data: &[u8]| {
-    // Skip inputs that would cause issues for C string conversion
-    if data.contains(&0) {
-        return;
-    }
-    
     let rust_result = rust_detect_sqli(data);
     let rust_is_injection = rust_result.is_injection();
     
@@ -36,11 +33,14 @@ fuzz_target!(|data: &[u8]| {
             // Convert to string for debugging if possible
             let debug_input = String::from_utf8_lossy(data);
             
-            // Only panic if input is reasonable length for debugging
-            if data.len() < 1000 {
-                panic!("Differential detected! Input: {:?}, Rust: {}, C: {}", 
-                       debug_input, rust_is_injection, c_is_injection);
-            }
+            // Report every divergence. Capping this at 1000 bytes meant a
+            // divergence on a longer input was detected and then discarded,
+            // and length is exactly where two parsers drift apart.
+            let shown: String = debug_input.chars().take(2000).collect();
+            panic!(
+                "Differential detected! len={}, Rust: {}, C: {}, input: {:?}",
+                data.len(), rust_is_injection, c_is_injection, shown
+            );
         }
     }
 });
