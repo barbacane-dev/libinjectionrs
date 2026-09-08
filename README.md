@@ -12,7 +12,9 @@ A vibe port (AI translation without manually reviewing much of the code) of the 
 - All the test files for the C library are run by the Rust library and pass.
 - Linting has been configured both to deny unsafe code and many conditions that could result in panics in the library, excluding slice indexing which could theoretically still panic (tests and debug tools still allow panics).
 - CI runs on every push and pull request: lints, unit tests, the differential
-  test below, and two minutes of differential fuzzing per detector.
+  test below, and two minutes of differential fuzzing per detector. The fuzz
+  job reports rather than gates, because it currently finds new divergence
+  classes faster than they can be fixed.
 - `comparison-bin/tests/differential.rs` compares this port against the C
   library over libinjection's own corpus (~163,000 inputs), on both verdicts
   and fingerprints. Divergences outside the known classes below fail the build.
@@ -30,9 +32,17 @@ Both are false negatives, so both are missed detections.
 | SQLi | SQL keywords of three or more words are not folded into a single keyword token. `LOCK IN SHARE MODE` fingerprints `k` in C and `nnnn` here; `x IN BOOLEAN MODE` gives `nk` and `nnn`. Two-word keywords such as `INTO OUTFILE` fold correctly on their own, and every intermediate prefix is present in the keyword table, so the defect is in chaining the merge rather than in the data. | 10 verdict divergences, 1,631 fingerprint divergences (~1% of the corpus) |
 | XSS | Whitespace or a control byte between an attribute name and its `=` is not recognised, as in `<img src=x onerror%09="alert(1)">`. | 14 verdict divergences |
 
+| SQLi | A NUL byte inside a `$`-prefixed token changes tokenization in C but not here: `'$\0T` fingerprints `s1n` in C and `snn` here, so `T'$\0T#` is an injection to C and clean here. Without the NUL both give `snn`. | pinned by a dedicated test |
+
 The fingerprint count is the better measure of drift: the verdict surviving a
 tokenization difference is luck rather than correctness, so the 1,631 is the
 number to drive down.
+
+These are the classes characterised so far, not a complete list. Once the fuzz
+targets stopped skipping NUL bytes they began finding a new class every few
+minutes, including at least one false positive (`'/@@\0...` is flagged here
+and not by C). Enumerating the rest is open-ended, which is why the fuzz job
+reports instead of gating.
 
 ## Project Structure
 ```text
