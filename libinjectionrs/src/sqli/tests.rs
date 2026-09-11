@@ -101,25 +101,28 @@ mod tests {
     fn test_variable_token_symbols_preserved() {
         use crate::sqli::tokenizer::{SqliTokenizer, TokenType};
         
+        // C stores the name without '@'; the '@' count lives in `count`, and
+        // the printed form reconstructs the '@' prefix from it.
+        // (input, expected value without '@', expected count)
         let test_cases = vec![
-            ("@", "@"),
-            ("@@", "@@"), 
-            ("@version", "@version"),
-            ("@@version", "@@version"),
+            ("@", "", 1i32),
+            ("@@", "", 2i32),
+            ("@version", "version", 1i32),
+            ("@@version", "version", 2i32),
         ];
-        
-        for (input_str, expected_value) in test_cases {
+
+        for (input_str, expected_value, expected_count) in test_cases {
             let input = input_str.as_bytes();
             let flags = SqliFlags::new(0);
             let mut tokenizer = SqliTokenizer::new(input, flags);
-            
+
             if let Some(token) = tokenizer.next_token() {
-                assert_eq!(token.token_type, TokenType::Variable, 
+                assert_eq!(token.token_type, TokenType::Variable,
                     "Token type should be Variable for input '{}'", input_str);
                 assert_eq!(token.value_as_str(), expected_value,
-                    "Token value should preserve @ symbols for input '{}'", input_str);
-                assert_eq!(token.pos, 0,
-                    "Token position should start at 0 for input '{}'", input_str);
+                    "Token value should be the name without '@' for input '{}'", input_str);
+                assert_eq!(token.count, expected_count,
+                    "Token count should equal the number of '@' for input '{}'", input_str);
             } else {
                 panic!("No token found for input '{}'", input_str);
             }

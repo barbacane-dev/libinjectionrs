@@ -420,3 +420,24 @@ fn nul_as_whitespace_in_html5_matches_the_c_library() {
     );
     assert!(!c_xss(input), "C treats this as safe, and so must the port");
 }
+
+/// Guards the variable token value: C stores the name without the leading `@`
+/// (the `@` count lives in a separate field), so the function fold that matches
+/// a name like `PASSWORD` sees `pasSword`, not `@pasSword`. The corpus has no
+/// `@`-variable named like a function followed by `(`, so the fuzzer found it.
+#[test]
+fn at_variable_named_like_a_function_matches_the_c_library() {
+    // `@pasSword(` : C types the variable as a function (fingerprint `f`), so
+    // this folds to `f(f(1`, a blacklisted pattern. The port must agree.
+    let input: &[u8] = b"@pasSword(pasSword(2";
+    let (c_is, c_fp) = c_sqli(input);
+    let rust = libinjectionrs::detect_sqli(input);
+    let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+    assert_eq!(
+        (rust.is_injection(), rust_fp.as_str()),
+        (c_is, c_fp.as_str()),
+        "@-variable named like a function diverges from the C library"
+    );
+    assert_eq!(c_fp, "f(f(1", "C folds the variable to a function");
+    assert!(c_is, "C flags this injection, and so must the port");
+}
