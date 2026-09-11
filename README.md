@@ -11,10 +11,11 @@ A vibe port (AI translation without manually reviewing much of the code) of the 
 - While the AI did all of the coding work, its process was supervised by a human and most of its outputs required additional correction prompts.
 - All the test files for the C library are run by the Rust library and pass.
 - Linting has been configured both to deny unsafe code and many conditions that could result in panics in the library, excluding slice indexing which could theoretically still panic (tests and debug tools still allow panics).
-- CI runs on every push and pull request: lints, unit tests, the differential
-  test below, and two minutes of differential fuzzing per detector. The fuzz
-  job reports rather than gates, because it currently finds new divergence
-  classes faster than they can be fixed.
+- CI runs on every push and pull request: lints, unit tests, a line-coverage
+  gate on the library, the differential test below, and two minutes of
+  differential fuzzing per detector. The fuzz job reports rather than gates,
+  because it currently finds new divergence classes faster than they can be
+  fixed.
 - `comparison-bin/tests/differential.rs` compares this port against the C
   library over libinjection's own corpus (~163,000 inputs), on both verdicts
   and fingerprints. Divergences outside the known classes below fail the build.
@@ -25,24 +26,23 @@ A vibe port (AI translation without manually reviewing much of the code) of the 
 ## Known divergences from the C library
 
 Measured by `cargo test -p libinjection-comparison --test differential`.
-Both are false negatives, so both are missed detections.
+Each is a missed detection (a false negative).
 
 | Area | Symptom | Status |
 |---|---|---|
-| SQLi | SQL keywords of three or more words are not folded into a single keyword token. `LOCK IN SHARE MODE` fingerprints `k` in C and `nnnn` here; `x IN BOOLEAN MODE` gives `nk` and `nnn`. Two-word keywords such as `INTO OUTFILE` fold correctly on their own, and every intermediate prefix is present in the keyword table, so the defect is in chaining the merge rather than in the data. | 10 verdict divergences, 1,631 fingerprint divergences (~1% of the corpus) |
+| SQLi | `INTO OUTFILE` followed by a string. The words now fold (`1 into outfile 'asd'` tokenizes to `1ks`), but that fingerprint does not win over the single-quote reparse the way it does in C, so C flags it and this port does not. | 3 fingerprint divergences |
 | XSS | Whitespace or a control byte between an attribute name and its `=` is not recognised, as in `<img src=x onerror%09="alert(1)">`. | 14 verdict divergences |
-
 | SQLi | A NUL byte inside a `$`-prefixed token changes tokenization in C but not here: `'$\0T` fingerprints `s1n` in C and `snn` here, so `T'$\0T#` is an injection to C and clean here. Without the NUL both give `snn`. | pinned by a dedicated test |
 
-The fingerprint count is the better measure of drift: the verdict surviving a
-tokenization difference is luck rather than correctness, so the 1,631 is the
-number to drive down.
+Multi-word keyword folding (`LOCK IN SHARE MODE`, `IN BOOLEAN MODE`) previously
+accounted for ~1,631 fingerprint divergences, about 1% of the corpus. Folding
+by table presence rather than by resulting type retired it; the fingerprint
+divergence count is now 3, all the `INTO OUTFILE` class above.
 
-These are the classes characterised so far, not a complete list. Once the fuzz
-targets stopped skipping NUL bytes they began finding a new class every few
-minutes, including at least one false positive (`'/@@\0...` is flagged here
-and not by C). Enumerating the rest is open-ended, which is why the fuzz job
-reports instead of gating.
+The fingerprint count is the measure of drift: a verdict surviving a
+tokenization difference is luck rather than correctness. These are the classes
+characterised so far, not a complete list; the fuzz job keeps surfacing new
+ones, so it reports rather than gates.
 
 ## Project Structure
 ```text
