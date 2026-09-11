@@ -201,8 +201,13 @@ fn sqli_fingerprint_divergences_do_not_grow() {
     for e in &examples {
         println!("{e}");
     }
+    // The `<=` form is deliberate: it stays correct if the ceiling ever has to
+    // rise again. With the ceiling at 0 the comparison is `usize <= 0`, which
+    // clippy flags as absurd, so it is allowed here rather than special-cased.
+    #[allow(clippy::absurd_extreme_comparisons)]
+    let within_ceiling = diverged <= FINGERPRINT_DIVERGENCE_CEILING;
     assert!(
-        diverged <= FINGERPRINT_DIVERGENCE_CEILING,
+        within_ceiling,
         "fingerprint divergences rose to {diverged}, above the {FINGERPRINT_DIVERGENCE_CEILING} \
          recorded when this test was written. Lower the ceiling when fixing, never raise it.\n{}",
         examples.join("\n")
