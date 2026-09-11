@@ -332,3 +332,27 @@ fn nul_in_dollar_token_matches_the_c_library() {
     assert_eq!(c_sqli(b"'$\0T").1, "s1n");
     assert!(c_sqli(b"T'$\0T#").0, "C flags this injection, and so must the port");
 }
+
+/// Guards the `sp_password` force-true when the input is not valid UTF-8. C's
+/// `my_memmem` searches the raw bytes, so it finds `sp_password` even amid high
+/// bytes; the port searches bytes too rather than lossily decoding to a string.
+/// The text corpus reaches this only in ASCII, so the fuzzer found this case.
+#[test]
+fn sp_password_in_non_utf8_input_matches_the_c_library() {
+    // A comment-terminated fingerprint with `sp_password` embedded among high
+    // bytes. C flags it via the raw-byte memmem; the port must agree.
+    let input: &[u8] = &[
+        0x2d, 0xfe, 0x23, 0x28, 0x41, 0x29, 0x2d, 0x28, 0x73, 0x70, 0x5f, 0x70, 0x61, 0x73,
+        0x73, 0x77, 0x6f, 0x72, 0x64, 0x8a, 0x8a, 0x8a, 0x8a, 0x5b, 0x8a, 0x8a, 0x3d, 0x8a,
+        0x8a, 0x8a, 0x8a, 0x8a, 0x8a, 0x2d, 0xff, 0xff, 0xff, 0x09, 0xff,
+    ];
+    let (c_is, c_fp) = c_sqli(input);
+    let rust = libinjectionrs::detect_sqli(input);
+    let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+    assert_eq!(
+        (rust.is_injection(), rust_fp.as_str()),
+        (c_is, c_fp.as_str()),
+        "sp_password in non-UTF-8 input diverges from the C library"
+    );
+    assert!(c_is, "C flags this injection, and so must the port");
+}

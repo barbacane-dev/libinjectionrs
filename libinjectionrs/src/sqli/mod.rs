@@ -1133,8 +1133,10 @@ impl<'a> SqliState<'a> {
     }
     
     fn contains_sp_password(&self) -> bool {
-        let input_str = core::str::from_utf8(self.input).unwrap_or("");
-        input_str.to_ascii_lowercase().contains("sp_password")
+        // C's my_memmem is a case-sensitive search over the raw input bytes,
+        // so it finds the needle regardless of surrounding non-UTF-8 bytes.
+        const NEEDLE: &[u8] = b"sp_password";
+        self.input.windows(NEEDLE.len()).any(|w| w == NEEDLE)
     }
     
     fn handle_two_token_whitelist(&self) -> bool {
