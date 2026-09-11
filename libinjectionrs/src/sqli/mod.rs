@@ -1284,9 +1284,13 @@ impl<'a> SqliState<'a> {
         
         // Check if middle token is a keyword (matching C behavior at libinjection_sqli.c:2201-2209)
         if self.tokens.len() >= 2 && self.tokens[1].token_type == TokenType::Keyword {
-            // If it's not "INTO OUTFILE" or "INTO DUMPFILE" (MySQL), then treat as safe
-            if self.tokens[1].len < 5 || 
-               !self.tokens[1].val.starts_with(b"INTO") {
+            // If it's not "INTO OUTFILE" or "INTO DUMPFILE" (MySQL), then treat as safe.
+            // C compares with cstrcasecmp("INTO", val, 4), so the check is
+            // case-insensitive: the token keeps the input's case, and `into
+            // outfile` is as common as `INTO OUTFILE`.
+            if self.tokens[1].len < 5
+                || !self.tokens[1].val[..4].eq_ignore_ascii_case(b"INTO")
+            {
                 return false;
             }
         }

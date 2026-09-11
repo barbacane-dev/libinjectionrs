@@ -12,9 +12,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 - Word merging now folds multi-word keywords by table presence, matching the C
   library's `ch != CHAR_NULL` check, so `LOCK IN SHARE MODE` and `IN BOOLEAN
-  MODE` fold as they do in C. Over the 162,963-input corpus this dropped
-  fingerprint divergences from 1,631 (~1%) to 3, and retired two known
-  divergence classes with no new divergence.
+  MODE` fold as they do in C.
+- The three-token whitelist compares `INTO` case-insensitively, matching C's
+  `cstrcasecmp`. It had used a case-sensitive `starts_with(b"INTO")`, so a
+  lowercase `1 into outfile 'asd'` was wrongly whitelisted as safe while C
+  flags it.
+- Together these bring **SQLi fingerprint divergences from the C library to 0**
+  over the 162,963-input corpus (from 1,631, about 1%), retiring every known
+  SQLi divergence class with no new divergence.
 
 ### Added
 - `lookup_word_type`, a presence-aware keyword lookup returning `None` only
@@ -24,8 +29,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   library.
 
 ### Changed
-- The differential fingerprint ceiling is lowered from 1,631 to 3, holding the
-  gain against regression.
+- The differential fingerprint ceiling is lowered from 1,631 to 0: SQLi
+  fingerprints now match the C library exactly across the corpus.
 
 ## Baseline
 

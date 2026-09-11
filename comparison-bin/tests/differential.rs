@@ -105,14 +105,13 @@ fn c_xss(input: &[u8]) -> bool {
     unsafe { harness_detect_xss(input.as_ptr() as *const c_char, input.len(), 0).is_xss != 0 }
 }
 
-/// Fingerprint divergences known today. Every one traces to the same
-/// multi-word keyword folding defect described on [`KNOWN_SQLI_DIVERGENCES`],
-/// and most do not change the verdict, so they are tracked as a ceiling rather
-/// than enumerated. Lower it when the defect is fixed; never raise it.
+/// The most SQLi fingerprint divergences from the C library the corpus is
+/// allowed to produce. Lower it when a defect is fixed; never raise it.
 ///
-/// 3 of 162,963 inputs, all the `INTO OUTFILE` + string reparse class. Word
-/// merging by table presence retired the rest (it was about 1%).
-const FINGERPRINT_DIVERGENCE_CEILING: usize = 3;
+/// 0 of 162,963 inputs: the Rust tokenizer produces the same fingerprint as the
+/// C library for every input in the corpus. Word merging by table presence and
+/// a case-insensitive `INTO` whitelist check closed the last of them.
+const FINGERPRINT_DIVERGENCE_CEILING: usize = 0;
 
 #[test]
 fn sqli_verdicts_match_the_c_library_over_the_full_corpus() {
@@ -177,8 +176,8 @@ fn sqli_verdicts_match_the_c_library_over_the_full_corpus() {
 
 /// Fingerprints are the tokenizer's output, so a divergence here is the
 /// clearest signal that the two implementations parse differently even when
-/// they happen to agree on the verdict. Tracked as a ceiling because the count
-/// is large and has one known cause.
+/// they happen to agree on the verdict. The corpus is now fully in agreement,
+/// so the ceiling is zero.
 #[test]
 fn sqli_fingerprint_divergences_do_not_grow() {
     let corpus = corpus();

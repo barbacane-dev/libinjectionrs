@@ -19,18 +19,11 @@ pub struct KnownDivergence {
     pub reason: &'static str,
 }
 
-/// Word merging now folds multi-word keywords one prefix at a time (matching
-/// the C library's lookup-by-presence), so `LOCK IN SHARE MODE` and `IN
-/// BOOLEAN MODE` agree. What remains is `INTO OUTFILE` followed by a string:
-/// the words fold to `1ks`, but that fingerprint does not win over the
-/// single-quote reparse the way it does in C.
-pub const KNOWN_SQLI_DIVERGENCES: &[KnownDivergence] = &[
-    KnownDivergence {
-        marker: "into outfile",
-        reason: "INTO OUTFILE followed by a string: the words now fold, but the \
-                 as-is fingerprint does not win over the single-quote reparse",
-    },
-];
+/// No SQLi divergences from the C library remain over the corpus: word merging
+/// folds multi-word keywords by table presence, and the three-token whitelist
+/// compares `INTO` case-insensitively as C does. New classes the fuzzer finds
+/// are added here.
+pub const KNOWN_SQLI_DIVERGENCES: &[KnownDivergence] = &[];
 
 /// Whitespace or a control byte between an attribute name and its `=`, as in
 /// `<img src=x onerror%09="alert(1)">`. The C library treats the separator as

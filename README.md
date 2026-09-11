@@ -28,21 +28,17 @@ A vibe port (AI translation without manually reviewing much of the code) of the 
 Measured by `cargo test -p libinjection-comparison --test differential`.
 Each is a missed detection (a false negative).
 
+**SQLi fingerprints now match the C library exactly over the whole corpus**
+(0 divergences of 162,963). Multi-word keyword folding by table presence and a
+case-insensitive `INTO` whitelist check closed the last of what was ~1%.
+
 | Area | Symptom | Status |
 |---|---|---|
-| SQLi | `INTO OUTFILE` followed by a string. The words now fold (`1 into outfile 'asd'` tokenizes to `1ks`), but that fingerprint does not win over the single-quote reparse the way it does in C, so C flags it and this port does not. | 3 fingerprint divergences |
 | XSS | Whitespace or a control byte between an attribute name and its `=` is not recognised, as in `<img src=x onerror%09="alert(1)">`. | 14 verdict divergences |
 | SQLi | A NUL byte inside a `$`-prefixed token changes tokenization in C but not here: `'$\0T` fingerprints `s1n` in C and `snn` here, so `T'$\0T#` is an injection to C and clean here. Without the NUL both give `snn`. | pinned by a dedicated test |
 
-Multi-word keyword folding (`LOCK IN SHARE MODE`, `IN BOOLEAN MODE`) previously
-accounted for ~1,631 fingerprint divergences, about 1% of the corpus. Folding
-by table presence rather than by resulting type retired it; the fingerprint
-divergence count is now 3, all the `INTO OUTFILE` class above.
-
-The fingerprint count is the measure of drift: a verdict surviving a
-tokenization difference is luck rather than correctness. These are the classes
-characterised so far, not a complete list; the fuzz job keeps surfacing new
-ones, so it reports rather than gates.
+These are the classes characterised so far, not a complete list; the fuzz job
+keeps surfacing new ones, so it reports rather than gates.
 
 ## Project Structure
 ```text
