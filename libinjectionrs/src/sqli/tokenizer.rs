@@ -1018,16 +1018,18 @@ impl<'a> SqliTokenizer<'a> {
             end_pos += 1;
         }
         
+        // C stores the value starting after the '@' symbols (cs + pos), so the
+        // token value is the name without the leading '@'. The @ count lives in
+        // `count`. This lets the PASSWORD/USER/... function fold match a name
+        // like `@pasSword`.
         if end_pos == new_pos {
             // Empty variable name (just @ or @@ symbols)
-            // Store the @ symbols like C implementation 
-            let var_slice = &self.input[self.pos..new_pos]; // Include @ symbols
-            self.current.assign(TYPE_VARIABLE, self.pos, new_pos - self.pos, var_slice);
+            let var_slice = &self.input[new_pos..new_pos];
+            self.current.assign(TYPE_VARIABLE, new_pos, 0, var_slice);
             new_pos
         } else {
-            // Non-empty variable - store the @ symbols + name like C
-            let var_slice = &self.input[self.pos..end_pos]; // Include @ symbols
-            self.current.assign(TYPE_VARIABLE, self.pos, end_pos - self.pos, var_slice);
+            let var_slice = &self.input[new_pos..end_pos];
+            self.current.assign(TYPE_VARIABLE, new_pos, end_pos - new_pos, var_slice);
             end_pos
         }
     }

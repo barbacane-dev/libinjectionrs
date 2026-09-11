@@ -12,10 +12,20 @@ use std::path::Path;
 fn format_token_for_c_compatibility(token: &Token) -> String {
     match token.token_type {
         TokenType::Variable => {
-            // Rust tokenizer already includes @ symbols in the token value, unlike C
-            // C stores variable name without @ and adds them in print_var based on count
-            // Rust stores the full @variable string, so just return it as-is
-            token.value_as_str().to_string()
+            // C's print_var prepends `count` '@' then prints the string form
+            // (str_open + value + str_close); the value has no '@'.
+            let mut result = String::new();
+            for _ in 0..token.count {
+                result.push('@');
+            }
+            if token.str_open != 0 {
+                result.push(token.str_open as char);
+            }
+            result.push_str(token.value_as_str());
+            if token.str_close != 0 {
+                result.push(token.str_close as char);
+            }
+            result
         }
         TokenType::String => {
             // Reconstruct string quotes like C's print_string function

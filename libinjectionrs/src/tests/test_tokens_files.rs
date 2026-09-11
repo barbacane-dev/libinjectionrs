@@ -162,10 +162,14 @@ fn format_variable_token(token: &Token) -> String {
             result.push(token.str_close as char);
         }
     } else {
-        // Simple case: @var -> value="@var" (includes @ symbols already)
+        // Simple case: the value is the name without '@'; C's testdriver
+        // prepends `count` '@' symbols to reconstruct the source form.
+        for _ in 0..token.count {
+            result.push('@');
+        }
         result.push_str(token.value_as_str());
     }
-    
+
     result
 }
 
