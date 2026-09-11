@@ -110,10 +110,9 @@ fn c_xss(input: &[u8]) -> bool {
 /// and most do not change the verdict, so they are tracked as a ceiling rather
 /// than enumerated. Lower it when the defect is fixed; never raise it.
 ///
-/// 1,631 of 162,963 inputs, about 1%. That the verdict survives most of them
-/// is luck rather than correctness, so this number is the better measure of
-/// how far the two implementations have drifted.
-const FINGERPRINT_DIVERGENCE_CEILING: usize = 1631;
+/// 3 of 162,963 inputs, all the `INTO OUTFILE` + string reparse class. Word
+/// merging by table presence retired the rest (it was about 1%).
+const FINGERPRINT_DIVERGENCE_CEILING: usize = 3;
 
 #[test]
 fn sqli_verdicts_match_the_c_library_over_the_full_corpus() {

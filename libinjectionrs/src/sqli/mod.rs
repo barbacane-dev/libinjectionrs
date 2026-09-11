@@ -533,9 +533,13 @@ impl<'a> SqliState<'a> {
                         let merged_original = format!("{} {}", a_val, b_val);
                         let merged_upper = merged_original.to_ascii_uppercase();
                         
-                        let lookup_result = sqli_data::lookup_word(&merged_upper);
-                        
-                        if lookup_result != TokenType::Bareword {
+                        // Merge when the pair is present in the table, whatever
+                        // its type, matching the C library's `ch != CHAR_NULL`.
+                        // Multi-word keyword prefixes (`LOCK IN`, `LOCK IN
+                        // SHARE`) are stored as barewords, so keying off
+                        // "type is a keyword" would break the chain at the first
+                        // prefix and leave `LOCK IN SHARE MODE` as four tokens.
+                        if let Some(lookup_result) = sqli_data::lookup_word_type(&merged_upper) {
                             // Update the first token with merged value and new type
                             self.token_vec[left].token_type = lookup_result;
                             // Update the value - store the original case version, not uppercase

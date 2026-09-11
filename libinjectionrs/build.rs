@@ -149,32 +149,32 @@ fn process_sqlparse_data(out_dir: &str) -> io::Result<()> {
         
         // Add helper function for keyword lookup
         writeln!(f, "use crate::sqli::TokenType;\n")?;
-        writeln!(f, "pub fn lookup_word(word: &str) -> TokenType {{")?;
+        // Presence-aware lookup: None when absent, Some(type) when present,
+        // including Some(Bareword) for multi-word keyword prefixes stored with
+        // the bareword type. Word merging keys off presence, matching the C
+        // library's CHAR_NULL check.
+        writeln!(f, "pub fn lookup_word_type(word: &str) -> Option<TokenType> {{")?;
         writeln!(f, "    let upper = word.to_ascii_uppercase();")?;
-        writeln!(f, "    ")?;
-        writeln!(f, "    // Binary search through sorted keywords")?;
-        writeln!(f, "    let result = SQL_KEYWORDS.binary_search_by(|k| k.word.cmp(&upper));")?;
-        writeln!(f, "    ")?;
-        writeln!(f, "    if let Ok(idx) = result {{")?;
-        writeln!(f, "        match SQL_KEYWORDS[idx].token_type {{")?;
-        writeln!(f, "            b'k' => TokenType::Keyword,")?;
-        writeln!(f, "            b'f' => TokenType::Function,")?;
-        writeln!(f, "            b'U' => TokenType::Union,")?;
-        writeln!(f, "            b'E' => TokenType::Expression,")?;
-        writeln!(f, "            b'T' => TokenType::Tsql,")?;
-        writeln!(f, "            b't' => TokenType::SqlType,")?;
-        writeln!(f, "            b'o' => TokenType::Operator,")?;
-        writeln!(f, "            b'&' => TokenType::LogicOperator,")?;
-        writeln!(f, "            b'v' => TokenType::Variable,")?;
-        writeln!(f, "            b'1' => TokenType::Number,")?;
-        writeln!(f, "            b'A' => TokenType::Collate,")?;
-        writeln!(f, "            b'B' => TokenType::Group,")?;
-        writeln!(f, "            b'F' => TokenType::Fingerprint,")?;
-        writeln!(f, "            _ => TokenType::Bareword,")?;
-        writeln!(f, "        }}")?;
-        writeln!(f, "    }} else {{")?;
-        writeln!(f, "        TokenType::Bareword")?;
-        writeln!(f, "    }}")?;
+        writeln!(f, "    let idx = SQL_KEYWORDS.binary_search_by(|k| k.word.cmp(&upper)).ok()?;")?;
+        writeln!(f, "    Some(match SQL_KEYWORDS[idx].token_type {{")?;
+        writeln!(f, "        b'k' => TokenType::Keyword,")?;
+        writeln!(f, "        b'f' => TokenType::Function,")?;
+        writeln!(f, "        b'U' => TokenType::Union,")?;
+        writeln!(f, "        b'E' => TokenType::Expression,")?;
+        writeln!(f, "        b'T' => TokenType::Tsql,")?;
+        writeln!(f, "        b't' => TokenType::SqlType,")?;
+        writeln!(f, "        b'o' => TokenType::Operator,")?;
+        writeln!(f, "        b'&' => TokenType::LogicOperator,")?;
+        writeln!(f, "        b'v' => TokenType::Variable,")?;
+        writeln!(f, "        b'1' => TokenType::Number,")?;
+        writeln!(f, "        b'A' => TokenType::Collate,")?;
+        writeln!(f, "        b'B' => TokenType::Group,")?;
+        writeln!(f, "        b'F' => TokenType::Fingerprint,")?;
+        writeln!(f, "        _ => TokenType::Bareword,")?;
+        writeln!(f, "    }})")?;
+        writeln!(f, "}}\n")?;
+        writeln!(f, "pub fn lookup_word(word: &str) -> TokenType {{")?;
+        writeln!(f, "    lookup_word_type(word).unwrap_or(TokenType::Bareword)")?;
         writeln!(f, "}}\n")?;
     }
     

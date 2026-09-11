@@ -19,31 +19,16 @@ pub struct KnownDivergence {
     pub reason: &'static str,
 }
 
-/// SQL keywords of three or more words are not folded into a single keyword
-/// token.
-///
-/// Two-word keywords fold correctly on their own (`into outfile` fingerprints
-/// `k` in both), and every intermediate prefix is present in both keyword
-/// tables (`LOCK IN`, `LOCK IN SHARE`, `LOCK IN SHARE MODE`), so the defect is
-/// in chaining the merge rather than in the data.
-///
-/// | input | C | Rust |
-/// |---|---|---|
-/// | `LOCK IN SHARE MODE` | `k` | `nnnn` |
-/// | `x IN BOOLEAN MODE` | `nk` | `nnn` |
-/// | `1 into outfile 'asd'` | `1ks` | `sns` |
+/// Word merging now folds multi-word keywords one prefix at a time (matching
+/// the C library's lookup-by-presence), so `LOCK IN SHARE MODE` and `IN
+/// BOOLEAN MODE` agree. What remains is `INTO OUTFILE` followed by a string:
+/// the words fold to `1ks`, but that fingerprint does not win over the
+/// single-quote reparse the way it does in C.
 pub const KNOWN_SQLI_DIVERGENCES: &[KnownDivergence] = &[
     KnownDivergence {
         marker: "into outfile",
-        reason: "multi-word keyword INTO OUTFILE is not folded when followed by a string",
-    },
-    KnownDivergence {
-        marker: "lock in share mode",
-        reason: "four-word keyword LOCK IN SHARE MODE is not folded",
-    },
-    KnownDivergence {
-        marker: "in boolean mode",
-        reason: "three-word keyword IN BOOLEAN MODE is not folded",
+        reason: "INTO OUTFILE followed by a string: the words now fold, but the \
+                 as-is fingerprint does not win over the single-quote reparse",
     },
 ];
 
