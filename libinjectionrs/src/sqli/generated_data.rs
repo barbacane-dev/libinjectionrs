@@ -9624,32 +9624,37 @@ pub const SQL_KEYWORDS: &[Keyword] = &[
 
 use crate::sqli::TokenType;
 
-pub fn lookup_word(word: &str) -> TokenType {
+/// Look up a word in the keyword table, distinguishing "not present" (`None`)
+/// from "present, typed as bareword" (`Some(Bareword)`).
+///
+/// The C library's `lookup` returns `CHAR_NULL` only when the word is absent,
+/// and multi-word keywords such as `LOCK IN` and `LOCK IN SHARE` are stored in
+/// the table with the bareword type `n`. Word merging keys off presence, not
+/// type, so this distinction is what lets a multi-word keyword fold one word at
+/// a time.
+pub fn lookup_word_type(word: &str) -> Option<TokenType> {
     let upper = word.to_ascii_uppercase();
-    
-    // Binary search through sorted keywords
-    let result = SQL_KEYWORDS.binary_search_by(|k| k.word.cmp(&upper));
-    
-    if let Ok(idx) = result {
-        match SQL_KEYWORDS[idx].token_type {
-            b'k' => TokenType::Keyword,
-            b'f' => TokenType::Function,
-            b'U' => TokenType::Union,
-            b'E' => TokenType::Expression,
-            b'T' => TokenType::Tsql,
-            b't' => TokenType::SqlType,
-            b'o' => TokenType::Operator,
-            b'&' => TokenType::LogicOperator,
-            b'v' => TokenType::Variable,
-            b'1' => TokenType::Number,
-            b'A' => TokenType::Collate,
-            b'B' => TokenType::Group,
-            b'F' => TokenType::Fingerprint,
-            _ => TokenType::Bareword,
-        }
-    } else {
-        TokenType::Bareword
-    }
+    let idx = SQL_KEYWORDS.binary_search_by(|k| k.word.cmp(&upper)).ok()?;
+    Some(match SQL_KEYWORDS[idx].token_type {
+        b'k' => TokenType::Keyword,
+        b'f' => TokenType::Function,
+        b'U' => TokenType::Union,
+        b'E' => TokenType::Expression,
+        b'T' => TokenType::Tsql,
+        b't' => TokenType::SqlType,
+        b'o' => TokenType::Operator,
+        b'&' => TokenType::LogicOperator,
+        b'v' => TokenType::Variable,
+        b'1' => TokenType::Number,
+        b'A' => TokenType::Collate,
+        b'B' => TokenType::Group,
+        b'F' => TokenType::Fingerprint,
+        _ => TokenType::Bareword,
+    })
+}
+
+pub fn lookup_word(word: &str) -> TokenType {
+    lookup_word_type(word).unwrap_or(TokenType::Bareword)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

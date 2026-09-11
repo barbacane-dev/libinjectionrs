@@ -1051,12 +1051,8 @@ impl<'a> SqliTokenizer<'a> {
         
         // Check for $1,000.00 format
         let money_chars = b"0123456789.,";
-        let mut end_pos = pos + 1;
-        
-        while end_pos < slen && money_chars.contains(&self.input[end_pos]) {
-            end_pos += 1;
-        }
-        
+        let end_pos = strlenspn(self.input, pos + 1, money_chars);
+
         if end_pos > pos + 1 {
             // Check for special case: $. should be parsed as word
             if end_pos == pos + 2 && self.input[pos + 1] == b'.' {
@@ -1075,12 +1071,8 @@ impl<'a> SqliTokenizer<'a> {
         
         // Check for PostgreSQL $tag$ strings
         let tag_chars = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        let mut tag_end = pos + 1;
-        
-        while tag_end < slen && tag_chars.contains(&self.input[tag_end]) {
-            tag_end += 1;
-        }
-        
+        let tag_end = strlenspn(self.input, pos + 1, tag_chars);
+
         if tag_end == pos + 1 {
             // Just $ followed by non-alphanumeric
             self.current.assign_char(TYPE_BAREWORD, pos, b'$');
@@ -1321,4 +1313,23 @@ impl<'a> SqliTokenizer<'a> {
         self.current.str_close = CHAR_NULL;
         slen
     }
+}
+/// End index of the run of bytes from `start` that are in `accept`, matching
+/// the C library's `strlenspn`.
+///
+/// C tests membership with `strchr(accept, byte)`, and `strchr` locates a NUL
+/// byte in the accept string's own terminator, so it reports a NUL as a member
+/// of any set. An embedded NUL therefore extends the run rather than ending it:
+/// `$\0` scans as a number because the NUL counts as a money character. This
+/// reproduces that so the tokenizer follows C on adversarial NUL bytes.
+fn strlenspn(input: &[u8], start: usize, accept: &[u8]) -> usize {
+    let mut i = start;
+    while i < input.len() {
+        let byte = input[i];
+        if byte != 0 && !accept.contains(&byte) {
+            break;
+        }
+        i += 1;
+    }
+    i
 }

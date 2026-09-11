@@ -177,7 +177,12 @@ impl XssDetector {
                (attr_name[1] == b'n' || attr_name[1] == b'N') {
                 let event_name = &attr_name[2..];
                 for event in BLACK_ATTR_EVENTS {
-                    if Self::cstrcasecmp_with_null(event.name.as_bytes(), event_name) {
+                    // C compares only strlen(black->name) chars, so anything
+                    // after the event name is ignored: `onerror%09` matches on
+                    // the `error` prefix. The general BLACKATTR check below
+                    // uses the full length, so only this one is limited.
+                    let name = event.name.as_bytes();
+                    if Self::cstrcasecmp_with_null_limited(name, event_name, name.len()) {
                         return event.atype;
                     }
                 }
