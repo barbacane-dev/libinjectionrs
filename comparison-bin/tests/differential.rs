@@ -403,3 +403,20 @@ fn nul_in_number_literal_matches_the_c_library() {
     // The NUL inside the hex literal is consumed, so this stays a UNION injection.
     assert!(c_sqli(b"1 union select 0x4\x005 from x").0, "C flags this injection, and so must the port");
 }
+
+/// Guards the HTML5 tokenizer's treatment of a NUL as whitespace. C's
+/// `h5_is_white` is `strchr(" \t\n\v\f\r", ch)`, which matches the string's NUL
+/// terminator, so a NUL ends an attribute name or unquoted value as whitespace
+/// would. The text corpus has no NUL bytes, so only the fuzzer reaches this.
+#[test]
+fn nul_as_whitespace_in_html5_matches_the_c_library() {
+    // A NUL inside an attribute name: C ends the name there, so the trailing
+    // `</`+backtick never becomes a comment. The port must not flag it either.
+    let input: &[u8] = &[60, 0, 47, 50, 0, 255, 62, 60, 47, 96];
+    assert_eq!(
+        libinjectionrs::detect_xss(input).is_injection(),
+        c_xss(input),
+        "NUL-as-whitespace in HTML5 diverges from the C library"
+    );
+    assert!(!c_xss(input), "C treats this as safe, and so must the port");
+}
