@@ -2,8 +2,6 @@
 
 A memory-safe Rust port of [libinjection](https://github.com/libinjection/libinjection), the SQL injection and XSS detection library. The original translation from C was AI-generated (a "vibe port": an AI plan from GPT-5, executed with Claude Code, with little of the code manually reviewed line by line). This fork exists to make that port trustworthy by measurement rather than by reading: it is differential-tested against the C library it was ported from, and this README describes what that testing currently shows.
 
-It backs the `@detectSQLi` and `@detectXSS` operators in [parapet](https://github.com/barbacane-dev/parapet).
-
 ## Features
 
 - SQL injection detection with fingerprinting

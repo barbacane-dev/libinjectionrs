@@ -1,9 +1,8 @@
 # Changelog
 
-All notable changes to this fork are recorded here. The fork exists to make
-`libinjectionrs` a differential-verified backend for `@detectSQLi` /
-`@detectXSS` in [parapet](https://github.com/barbacane-dev/parapet); see the
-audit in that repository for the acceptance bar.
+All notable changes to this fork are recorded here. It adds differential
+verification against the C library `libinjectionrs` was ported from, and closes
+the divergences that testing surfaces.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
@@ -46,5 +45,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 The starting point of this fork: a working AI port whose verdicts already match
 the C library across the corpus, with a differential test, CI, and a
-known-divergence list added during the parapet audit
+known-divergence list added when that harness was contributed upstream
 ([saarw/libinjectionrs#1](https://github.com/saarw/libinjectionrs/pull/1)).
