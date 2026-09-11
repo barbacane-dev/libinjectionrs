@@ -1,0 +1,51 @@
+name: Fuzz campaign
+
+# The long differential fuzzing campaign that drives toward an hours-clean
+# surface, kept separate from the per-pull-request smoke test in ci.yml. It
+# runs nightly and on demand, and fails visibly if either detector diverges
+# from the C library so the crashing input can be triaged. The default budget
+# is tunable through the workflow_dispatch input; the corpus is committed, so
+# each run builds on the last.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      max_total_time:
+        description: Seconds to fuzz per detector
+        required: false
+        default: '1800'
+
+permissions:
+  contents: read
+
+env:
+  MAX_TOTAL_TIME: ${{ github.event.inputs.max_total_time || '1800' }}
+
+jobs:
+  campaign:
+    name: Differential fuzzing (campaign)
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@nightly
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the C harness
+        run: make -C ffi-harness
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz --locked
+      - name: Fuzz SQLi differential
+        run: cargo fuzz run fuzz_differential_sqli -- -max_total_time=$MAX_TOTAL_TIME
+      - name: Fuzz XSS differential
+        run: cargo fuzz run fuzz_differential_xss -- -max_total_time=$MAX_TOTAL_TIME
+      - name: Upload crash artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz/artifacts/
+          if-no-files-found: ignore

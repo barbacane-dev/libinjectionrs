@@ -90,13 +90,11 @@ jobs:
   fuzz:
     name: Differential fuzzing (reporting)
     runs-on: ubuntu-latest
-    # Reporting, not gating, and deliberately so. With the NUL blind spot
-    # removed the fuzzer finds a new divergence class within a couple of
-    # minutes, repeatedly, so this job fails today and will keep failing until
-    # those are fixed. The alternative is widening the exception list until it
-    # excuses everything, which would leave a gate that cannot fail. The
-    # corpus differential above is the gate; this job is here to keep
-    # surfacing new classes.
+    # A short per-pull-request smoke test: two minutes per detector, enough to
+    # catch an obvious new divergence class quickly. It reports rather than
+    # gates, since a probabilistic short run is a weak signal to block a merge
+    # on; the corpus differential above is the deterministic gate. The long
+    # campaign lives in fuzz-campaign.yml.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
@@ -111,7 +109,7 @@ jobs:
       - name: Install cargo-fuzz
         run: cargo install cargo-fuzz --locked
       # Short by design: enough to surface a class on every pull request, not
-      # a replacement for a long campaign. The corpus is committed, so runs
+      # a replacement for the long campaign. The corpus is committed, so runs
       # build on each other.
       - name: Fuzz SQLi differential
         run: cargo fuzz run fuzz_differential_sqli -- -max_total_time=120

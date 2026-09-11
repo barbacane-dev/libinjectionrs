@@ -332,3 +332,91 @@ fn nul_in_dollar_token_matches_the_c_library() {
     assert_eq!(c_sqli(b"'$\0T").1, "s1n");
     assert!(c_sqli(b"T'$\0T#").0, "C flags this injection, and so must the port");
 }
+
+/// Guards the `sp_password` force-true when the input is not valid UTF-8. C's
+/// `my_memmem` searches the raw bytes, so it finds `sp_password` even amid high
+/// bytes; the port searches bytes too rather than lossily decoding to a string.
+/// The text corpus reaches this only in ASCII, so the fuzzer found this case.
+#[test]
+fn sp_password_in_non_utf8_input_matches_the_c_library() {
+    // A comment-terminated fingerprint with `sp_password` embedded among high
+    // bytes. C flags it via the raw-byte memmem; the port must agree.
+    let input: &[u8] = &[
+        0x2d, 0xfe, 0x23, 0x28, 0x41, 0x29, 0x2d, 0x28, 0x73, 0x70, 0x5f, 0x70, 0x61, 0x73,
+        0x73, 0x77, 0x6f, 0x72, 0x64, 0x8a, 0x8a, 0x8a, 0x8a, 0x5b, 0x8a, 0x8a, 0x3d, 0x8a,
+        0x8a, 0x8a, 0x8a, 0x8a, 0x8a, 0x2d, 0xff, 0xff, 0xff, 0x09, 0xff,
+    ];
+    let (c_is, c_fp) = c_sqli(input);
+    let rust = libinjectionrs::detect_sqli(input);
+    let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+    assert_eq!(
+        (rust.is_injection(), rust_fp.as_str()),
+        (c_is, c_fp.as_str()),
+        "sp_password in non-UTF-8 input diverges from the C library"
+    );
+    assert!(c_is, "C flags this injection, and so must the port");
+}
+
+/// Guards the collate + bareword rule for a non-UTF-8 bareword. C's `strchr`
+/// searches the raw token value for `_`, retyping the bareword as an SQL type;
+/// the port searches the value bytes too rather than lossily decoding it. The
+/// text corpus reaches this only in ASCII.
+#[test]
+fn collate_underscore_in_non_utf8_bareword_matches_the_c_library() {
+    // `collate` then a bareword with `_` next to a high byte: C's strchr finds
+    // the `_` and marks it TYPE_SQLTYPE (fingerprint `t`); the port must agree.
+    let input: &[u8] = b"collate \xff_z";
+    let (c_is, c_fp) = c_sqli(input);
+    let rust = libinjectionrs::detect_sqli(input);
+    let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+    assert_eq!(
+        (rust.is_injection(), rust_fp.as_str()),
+        (c_is, c_fp.as_str()),
+        "collate + non-UTF-8 bareword diverges from the C library"
+    );
+    assert_eq!(c_fp, "At", "C types the bareword as an SQL type (fingerprint char `t`)");
+}
+
+/// Guards the number scans that use `strlenspn`: the `0x`/`0b` prefixes and the
+/// `B'..'`/`X'..'` string forms. C's `strlenspn` counts an embedded NUL as a
+/// digit, so a NUL inside the literal is consumed rather than ending it. The
+/// text corpus has no NUL bytes, so only the fuzzer reaches this.
+#[test]
+fn nul_in_number_literal_matches_the_c_library() {
+    let inputs: [&[u8]; 5] = [
+        b"0x1\x002",
+        b"0b1\x001",
+        b"B'0\x001'",
+        b"X'a\x00b'",
+        b"1 union select 0x4\x005 from x",
+    ];
+    for input in inputs {
+        let (c_is, c_fp) = c_sqli(input);
+        let rust = libinjectionrs::detect_sqli(input);
+        let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+        assert_eq!(
+            (rust.is_injection(), rust_fp.as_str()),
+            (c_is, c_fp.as_str()),
+            "{input:?} diverges from the C library"
+        );
+    }
+    // The NUL inside the hex literal is consumed, so this stays a UNION injection.
+    assert!(c_sqli(b"1 union select 0x4\x005 from x").0, "C flags this injection, and so must the port");
+}
+
+/// Guards the HTML5 tokenizer's treatment of a NUL as whitespace. C's
+/// `h5_is_white` is `strchr(" \t\n\v\f\r", ch)`, which matches the string's NUL
+/// terminator, so a NUL ends an attribute name or unquoted value as whitespace
+/// would. The text corpus has no NUL bytes, so only the fuzzer reaches this.
+#[test]
+fn nul_as_whitespace_in_html5_matches_the_c_library() {
+    // A NUL inside an attribute name: C ends the name there, so the trailing
+    // `</`+backtick never becomes a comment. The port must not flag it either.
+    let input: &[u8] = &[60, 0, 47, 50, 0, 255, 62, 60, 47, 96];
+    assert_eq!(
+        libinjectionrs::detect_xss(input).is_injection(),
+        c_xss(input),
+        "NUL-as-whitespace in HTML5 diverges from the C library"
+    );
+    assert!(!c_xss(input), "C treats this as safe, and so must the port");
+}

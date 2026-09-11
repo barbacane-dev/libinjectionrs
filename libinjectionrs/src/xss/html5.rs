@@ -238,13 +238,15 @@ impl<'a> Html5State<'a> {
         None
     }
 
+    // C's h5_is_white is `strchr(" \t\n\v\f\r", ch) != NULL`, and strchr
+    // matches the string's own NUL terminator, so NUL counts as whitespace.
     fn is_whitespace(ch: u8) -> bool {
-        matches!(ch, 0x20 | 0x09 | 0x0A | 0x0B | 0x0C | 0x0D)
+        matches!(ch, 0x00 | 0x20 | 0x09 | 0x0A | 0x0B | 0x0C | 0x0D)
     }
-    
-    // Match C h5_is_white function exactly: " \t\n\v\f\r"
+
+    // C's h5_is_white: " \t\n\v\f\r", with NUL counted via strchr's terminator.
     fn h5_is_white(ch: u8) -> bool {
-        matches!(ch, 0x20 | 0x09 | 0x0A | 0x0B | 0x0C | 0x0D)
+        matches!(ch, 0x00 | 0x20 | 0x09 | 0x0A | 0x0B | 0x0C | 0x0D)
     }
 
     // Match C alphabetic check exactly: (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')

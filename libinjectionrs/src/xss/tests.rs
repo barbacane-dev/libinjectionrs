@@ -226,3 +226,4 @@ fn test_fuzz_differential_070fdf5c() {
     assert_eq!(detector.detect(input), XssResult::Xss);
 }
 
+

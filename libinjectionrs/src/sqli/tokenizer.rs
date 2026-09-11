@@ -847,23 +847,18 @@ impl<'a> SqliTokenizer<'a> {
             return self.parse_word();
         }
         
-        let content_start = pos + 2;
-        let mut content_end = content_start;
-        
-        // Only allow 0 and 1
-        while content_end < slen && (self.input[content_end] == b'0' || self.input[content_end] == b'1') {
-            content_end += 1;
-        }
-        
+        // strlenspn counts an embedded NUL as a binary digit, as C does.
+        let content_end = strlenspn(self.input, pos + 2, b"01");
+
         if content_end >= slen || self.input[content_end] != b'\'' {
             return self.parse_word();
         }
-        
+
         let full_token = &self.input[pos..content_end + 1];
         self.current.assign(TYPE_NUMBER, pos, content_end + 1 - pos, full_token);
         content_end + 1
     }
-    
+
     fn parse_xstring(&mut self) -> usize {
         let pos = self.pos;
         let slen = self.input.len();
@@ -873,17 +868,9 @@ impl<'a> SqliTokenizer<'a> {
             return self.parse_word();
         }
         
-        let content_start = pos + 2;
-        let mut content_end = content_start;
-        
-        // Only allow hex digits
-        while content_end < slen {
-            match self.input[content_end] {
-                b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' => content_end += 1,
-                _ => break,
-            }
-        }
-        
+        // strlenspn counts an embedded NUL as a hex digit, as C does.
+        let content_end = strlenspn(self.input, pos + 2, b"0123456789ABCDEFabcdef");
+
         if content_end >= slen || self.input[content_end] != b'\'' {
             return self.parse_word();
         }
@@ -1018,9 +1005,16 @@ impl<'a> SqliTokenizer<'a> {
         // Regular variable name - must exactly match C implementation
         // C: " <>:\\?=@!#~+-*/&|^%(),';\t\n\v\f\r'`\""
         let var_chars = b" <>:\\?=@!#~+-*/&|^%(),;'\t\n\x0B\x0C\r'`\"";
+        // C ends the run with strlencspn, whose strchr(reject, byte) finds a NUL
+        // in the reject string's terminator, so a NUL ends the name even though
+        // it is not listed. Without this a NUL is folded into the variable and
+        // the tokenization diverges.
         let mut end_pos = new_pos;
-        
-        while end_pos < slen && !var_chars.contains(&self.input[end_pos]) {
+
+        while end_pos < slen
+            && self.input[end_pos] != 0
+            && !var_chars.contains(&self.input[end_pos])
+        {
             end_pos += 1;
         }
         
@@ -1098,14 +1092,9 @@ impl<'a> SqliTokenizer<'a> {
         if end_pos < slen && self.input[end_pos] == b'0' && end_pos + 1 < slen {
             match self.input[end_pos + 1] {
                 b'X' | b'x' => {
-                    end_pos += 2;
-                    while end_pos < slen {
-                        match self.input[end_pos] {
-                            b'0'..=b'9' | b'A'..=b'F' | b'a'..=b'f' => end_pos += 1,
-                            _ => break,
-                        }
-                    }
-                    
+                    // strlenspn counts an embedded NUL as a hex digit, as C does.
+                    end_pos = strlenspn(self.input, end_pos + 2, b"0123456789ABCDEFabcdef");
+
                     if end_pos == pos + 2 {
                         // No hex digits after 0x
                         let token = &self.input[pos..pos + 2];
@@ -1118,11 +1107,9 @@ impl<'a> SqliTokenizer<'a> {
                     }
                 }
                 b'B' | b'b' => {
-                    end_pos += 2;
-                    while end_pos < slen && (self.input[end_pos] == b'0' || self.input[end_pos] == b'1') {
-                        end_pos += 1;
-                    }
-                    
+                    // strlenspn counts an embedded NUL as a binary digit, as C does.
+                    end_pos = strlenspn(self.input, end_pos + 2, b"01");
+
                     if end_pos == pos + 2 {
                         // No binary digits after 0b
                         let token = &self.input[pos..pos + 2];

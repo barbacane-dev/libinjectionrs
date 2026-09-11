@@ -656,8 +656,10 @@ impl<'a> SqliState<'a> {
             } else if self.token_vec[left].token_type == TokenType::Collate &&
                       self.token_vec[left + 1].token_type == TokenType::Bareword {
                 // there are too many collation types.. so if the bareword has a "_" then it's TYPE_SQLTYPE
-                let val = self.token_vec[left + 1].value_as_str();
-                if val.contains('_') {
+                // C's strchr searches the raw value bytes, so a `_` among
+                // non-UTF-8 bytes still counts.
+                let tok = &self.token_vec[left + 1];
+                if tok.val[..tok.len.min(32)].contains(&b'_') {
                     self.token_vec[left + 1].token_type = TokenType::SqlType;
                     left = 0;
                 }
@@ -1133,8 +1135,10 @@ impl<'a> SqliState<'a> {
     }
     
     fn contains_sp_password(&self) -> bool {
-        let input_str = core::str::from_utf8(self.input).unwrap_or("");
-        input_str.to_ascii_lowercase().contains("sp_password")
+        // C's my_memmem is a case-sensitive search over the raw input bytes,
+        // so it finds the needle regardless of surrounding non-UTF-8 bytes.
+        const NEEDLE: &[u8] = b"sp_password";
+        self.input.windows(NEEDLE.len()).any(|w| w == NEEDLE)
     }
     
     fn handle_two_token_whitelist(&self) -> bool {
