@@ -1,107 +1,101 @@
 # libinjectionrs
 
-A vibe port (AI translation without manually reviewing much of the code) of the libinjection library from C to memory-safe Rust. Libinjection is a library for SQL injection and XSS attack detection in strings. The port was done with an original plan created with GPT-5 and then mostly executed with Claude Code. 
+A memory-safe Rust port of [libinjection](https://github.com/libinjection/libinjection), the SQL injection and XSS detection library. The original translation from C was AI-generated (a "vibe port": an AI plan from GPT-5, executed with Claude Code, with little of the code manually reviewed line by line). This fork exists to make that port trustworthy by measurement rather than by reading: it is differential-tested against the C library it was ported from, and this README describes what that testing currently shows.
+
+It backs the `@detectSQLi` and `@detectXSS` operators in [parapet](https://github.com/barbacane-dev/parapet).
 
 ## Features
+
 - SQL injection detection with fingerprinting
 - XSS detection with context awareness
+- No `unsafe`, and lints that deny the common panic sources (see [Linting](#linting))
 - Minimal heap allocations using `SmallVec`
 
-## Quality controls
-- While the AI did all of the coding work, its process was supervised by a human and most of its outputs required additional correction prompts.
-- All the test files for the C library are run by the Rust library and pass.
-- Linting has been configured both to deny unsafe code and many conditions that could result in panics in the library, excluding slice indexing which could theoretically still panic (tests and debug tools still allow panics).
-- CI runs on every push and pull request: lints, unit tests, a line-coverage
-  gate on the library, the differential test below, and two minutes of
-  differential fuzzing per detector. The fuzz job reports rather than gates,
-  because it currently finds new divergence classes faster than they can be
-  fixed.
-- `comparison-bin/tests/differential.rs` compares this port against the C
-  library over libinjection's own corpus (~163,000 inputs), on both verdicts
-  and fingerprints. Divergences outside the known classes below fail the build.
-- A test asserts that neither detector panics on adversarial input: every one-
-  and two-byte value including NUL, random metacharacter strings, and
-  50,000-byte pathological repeats.
+## Agreement with the C library
 
-## Known divergences from the C library
+Correctness here means one thing: the same answer as the C library. That is measured, not asserted, by `comparison-bin/tests/differential.rs`, which links the C sources through the FFI harness and compares this port against them over libinjection's own corpus of ~163,000 inputs, on both verdicts and fingerprints.
 
-Measured by `cargo test -p libinjection-comparison --test differential`.
-Each is a missed detection (a false negative).
+**No known divergence from the C library remains.** SQLi fingerprints and XSS verdicts match exactly across the whole corpus (0 of 162,963 each), and the NUL-in-`$`-token edge, which the text corpus cannot reach, is matched too and held by a dedicated test. Any divergence outside this state fails the build.
 
-**No known divergence from the C library remains.** SQLi fingerprints and XSS
-verdicts match exactly over the whole corpus (0 divergences of 162,963 each),
-and the NUL-in-`$`-token edge, unreachable from the text corpus, is matched too
-and guarded by a dedicated test. The fixes were: multi-word keyword folding by
-table presence, a case-insensitive `INTO` whitelist check, a length-limited XSS
-event-handler check, and a `strlenspn` that counts an embedded NUL as C's does.
+The fixes that got here, each following the C control flow rather than a particular input:
 
-New classes can still exist beyond the corpus and the characterised edges; the
-fuzz job keeps surfacing candidates, so it reports rather than gates.
+- multi-word keyword folding by table presence (`LOCK IN SHARE MODE`)
+- a case-insensitive `INTO` check in the three-token whitelist (`into outfile`)
+- a length-limited XSS event-handler check (`onerror%09=`)
+- a `strlenspn` that counts an embedded NUL as a set member, as C's `strchr` does
 
-## Project Structure
-```text
-libinjectionrs/
-├── benches/                    # Performance benchmarks
-├── comparison-bin/             # Tools for comparing Rust vs C behavior
-├── docs/                       # Architecture and porting documentation
-├── ffi-harness/               # C FFI testing harness
-├── fuzz/                      # Fuzzing targets and corpora
-├── libinjection-c/            # Git submodule with original C library
-├── libinjection-debug/        # Debug tools for comparing implementations
-├── libinjectionrs/            # Main Rust library source code
-└── scripts/                   # Build and corpus generation scripts
-```
+This is not the same as "provably identical". Beyond the corpus and these characterised edges, [differential fuzzing](#fuzzing) still finds new divergences, including false positives, within seconds. Treat this port as a close match with a measured gap of zero on the corpus, not as a drop-in replacement whose every answer is guaranteed.
 
-## Linting
-```cargo clippy --workspace --all-targets -- -A warnings```
+## Testing and CI
 
-## Development
+CI runs on every push and pull request:
 
-To get started with development, first fetch the git submodule containing the original C library:
+- **Lints and unit tests** across the workspace.
+- **Library coverage** (`cargo-llvm-cov`) with an enforced floor.
+- **Differential against the C library** — the job that matters, described above. A divergence fails it.
+- **Differential fuzzing** (two minutes per detector). It **reports rather than gates**: it still surfaces new divergence classes faster than they are fixed, so gating on it would mean either a red build forever or an exception list that excuses everything. The corpus differential is the gate; this job keeps new classes visible.
 
-```bash
-git submodule update --init --recursive
-```
+A separate test asserts that neither detector panics on adversarial input: every one- and two-byte value including NUL, random metacharacter strings, and 50,000-byte pathological repeats.
 
 ## Usage
 
 ```rust
 use libinjectionrs::{detect_sqli, detect_xss};
 
-// SQL injection detection
 let input = b"1' OR '1'='1";
-let result = detect_sqli(input);
-if result.is_injection() {
-    println!("SQL injection detected: {:?}", result.fingerprint);
+if detect_sqli(input).is_injection() {
+    // handle SQL injection
 }
 
-// XSS detection
-let input = b"<script>alert('xss')</script>";
-let result = detect_xss(input);
-if result.is_injection() {
-    println!("XSS detected");
+if detect_xss(b"<script>alert('xss')</script>").is_injection() {
+    // handle XSS
 }
 ```
 
+## Development
+
+Fetch the C library submodule first; the differential test and the FFI harness need it:
+
+```bash
+git submodule update --init --recursive
+cargo test                                                   # unit tests
+cargo test -p libinjection-comparison --test differential    # against the C library
+```
+
+`comparison-bin` and `libinjection-debug` compare and trace this port against C; reach for them before writing new probes.
+
+### Linting
+
+Third-party warnings are allowed, but the workspace denies `unsafe`, `unwrap`, `expect`, `panic`, `unreachable`, `todo`, and `unimplemented` in the library:
+
+```bash
+cargo clippy --workspace --all-targets -- -A warnings
+```
+
 ## Fuzzing
-Scripts create fuzz corpuses:
-  What the script does:
 
-  1. SQLi corpus: Extracts 50 SQL injection test cases from test-sqli-*.txt
-  files
-  2. XSS corpus: Extracts 63 HTML/XSS test cases from test-html5-*.txt files
+The fuzz targets under `fuzz/` compare each detector against C on generated input. `scripts/seed_fuzz_corpus.sh` seeds their corpora from libinjection's own `test-sqli-*.txt` and `test-html5-*.txt` cases, de-duplicated by hash:
 
-  3. Deduplication: Uses SHA1 hashes to avoid duplicate entries
-  4. Proper naming: Prefixes seeded files with seed_sqli_ or seed_xss_
+```bash
+./scripts/seed_fuzz_corpus.sh sqli   # SQLi corpus
+./scripts/seed_fuzz_corpus.sh xss    # XSS corpus
+./scripts/seed_fuzz_corpus.sh all    # both
+```
 
-  Usage:
+## Project structure
 
-  ./scripts/seed_fuzz_corpus.sh sqli    # Seed SQLi corpus only
-  ./scripts/seed_fuzz_corpus.sh xss     # Seed XSS corpus only  
-  ./scripts/seed_fuzz_corpus.sh all     # Seed both corpora
+```text
+libinjectionrs/       Main Rust library source
+comparison-bin/       Differential test and CLI comparison against C
+libinjection-debug/   Token-level tracing tools for comparing implementations
+ffi-harness/          C FFI harness the differential test links against
+fuzz/                 Differential fuzz targets and corpora
+benches/              Benchmarks
+libinjection-c/       Git submodule: the original C library
+docs/                 Architecture and porting notes
+scripts/              Corpus generation
+```
 
 ## License
 
-Licensed under the BSD 3-Clause License ([LICENSE](LICENSE) or <https://opensource.org/licenses/BSD-3-Clause>).
-
-This project is a Rust port of [libinjection](https://github.com/client9/libinjection), which is also licensed under the BSD 3-Clause License.
+Licensed under the BSD 3-Clause License ([LICENSE](LICENSE) or <https://opensource.org/licenses/BSD-3-Clause>). This is a Rust port of [libinjection](https://github.com/libinjection/libinjection), also BSD 3-Clause.
