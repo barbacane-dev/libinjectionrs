@@ -376,3 +376,30 @@ fn collate_underscore_in_non_utf8_bareword_matches_the_c_library() {
     );
     assert_eq!(c_fp, "At", "C types the bareword as an SQL type (fingerprint char `t`)");
 }
+
+/// Guards the number scans that use `strlenspn`: the `0x`/`0b` prefixes and the
+/// `B'..'`/`X'..'` string forms. C's `strlenspn` counts an embedded NUL as a
+/// digit, so a NUL inside the literal is consumed rather than ending it. The
+/// text corpus has no NUL bytes, so only the fuzzer reaches this.
+#[test]
+fn nul_in_number_literal_matches_the_c_library() {
+    let inputs: [&[u8]; 5] = [
+        b"0x1\x002",
+        b"0b1\x001",
+        b"B'0\x001'",
+        b"X'a\x00b'",
+        b"1 union select 0x4\x005 from x",
+    ];
+    for input in inputs {
+        let (c_is, c_fp) = c_sqli(input);
+        let rust = libinjectionrs::detect_sqli(input);
+        let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+        assert_eq!(
+            (rust.is_injection(), rust_fp.as_str()),
+            (c_is, c_fp.as_str()),
+            "{input:?} diverges from the C library"
+        );
+    }
+    // The NUL inside the hex literal is consumed, so this stays a UNION injection.
+    assert!(c_sqli(b"1 union select 0x4\x005 from x").0, "C flags this injection, and so must the port");
+}
