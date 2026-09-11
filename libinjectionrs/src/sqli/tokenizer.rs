@@ -1018,9 +1018,16 @@ impl<'a> SqliTokenizer<'a> {
         // Regular variable name - must exactly match C implementation
         // C: " <>:\\?=@!#~+-*/&|^%(),';\t\n\v\f\r'`\""
         let var_chars = b" <>:\\?=@!#~+-*/&|^%(),;'\t\n\x0B\x0C\r'`\"";
+        // C ends the run with strlencspn, whose strchr(reject, byte) finds a NUL
+        // in the reject string's terminator, so a NUL ends the name even though
+        // it is not listed. Without this a NUL is folded into the variable and
+        // the tokenization diverges.
         let mut end_pos = new_pos;
-        
-        while end_pos < slen && !var_chars.contains(&self.input[end_pos]) {
+
+        while end_pos < slen
+            && self.input[end_pos] != 0
+            && !var_chars.contains(&self.input[end_pos])
+        {
             end_pos += 1;
         }
         
