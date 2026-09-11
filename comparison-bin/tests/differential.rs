@@ -356,3 +356,23 @@ fn sp_password_in_non_utf8_input_matches_the_c_library() {
     );
     assert!(c_is, "C flags this injection, and so must the port");
 }
+
+/// Guards the collate + bareword rule for a non-UTF-8 bareword. C's `strchr`
+/// searches the raw token value for `_`, retyping the bareword as an SQL type;
+/// the port searches the value bytes too rather than lossily decoding it. The
+/// text corpus reaches this only in ASCII.
+#[test]
+fn collate_underscore_in_non_utf8_bareword_matches_the_c_library() {
+    // `collate` then a bareword with `_` next to a high byte: C's strchr finds
+    // the `_` and marks it TYPE_SQLTYPE (fingerprint `t`); the port must agree.
+    let input: &[u8] = b"collate \xff_z";
+    let (c_is, c_fp) = c_sqli(input);
+    let rust = libinjectionrs::detect_sqli(input);
+    let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+    assert_eq!(
+        (rust.is_injection(), rust_fp.as_str()),
+        (c_is, c_fp.as_str()),
+        "collate + non-UTF-8 bareword diverges from the C library"
+    );
+    assert_eq!(c_fp, "At", "C types the bareword as an SQL type (fingerprint char `t`)");
+}
