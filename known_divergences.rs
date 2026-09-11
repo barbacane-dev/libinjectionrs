@@ -40,26 +40,9 @@ pub fn known_class<'a>(
     classes.iter().find(|c| lower.contains(c.marker))
 }
 
-/// A NUL byte inside a `$`-prefixed token changes tokenization in the C
-/// library but not here: `'$\0T` fingerprints `s1n` in C and `snn` here, so
-/// `T'$\0T#` is an injection to C and clean to this port. Without the NUL the
-/// two agree (`'$T` gives `snn` both sides).
-///
-/// Kept deliberately narrow. Excusing every NUL-containing input would
-/// recreate the blind spot that hid this class in the first place: the fuzz
-/// targets used to skip anything with a NUL because they converted through
-/// `CString`, and the C harness takes an explicit length, so they never
-/// needed to.
-pub fn is_known_nul_divergence(input: &[u8]) -> bool {
-    input.contains(&0) && input.contains(&b'$')
-}
-
 /// Whether a raw byte input falls in any known class. Used by the fuzz
 /// targets, which generate bytes rather than text.
 pub fn is_known_divergence(input: &[u8], classes: &[KnownDivergence]) -> bool {
-    if is_known_nul_divergence(input) {
-        return true;
-    }
     match std::str::from_utf8(input) {
         Ok(text) => known_class(text, classes).is_some(),
         // A non-UTF-8 input cannot match a textual marker, but the NUL class

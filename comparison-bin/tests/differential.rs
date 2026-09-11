@@ -311,43 +311,24 @@ fn truncate(s: &str) -> String {
     s.chars().take(120).collect()
 }
 
-/// Pins the NUL-in-`$`-token class with its minimal case, because the text
-/// corpus does not contain NUL bytes and only the fuzzer reaches it otherwise.
-///
-/// Asserts the divergence still exists. When it is fixed this test fails,
-/// which is the signal to remove [`is_known_nul_divergence`] rather than leave
-/// it excusing future regressions.
+/// Guards the NUL-in-`$`-token case, because the text corpus contains no NUL
+/// bytes and only the fuzzer reaches it otherwise. C's `strlenspn` counts an
+/// embedded NUL as a member of any accept set (its `strchr` finds the accept
+/// string's terminator), so `'$\0T` scans `$\0` as a number; the port now does
+/// the same.
 #[test]
-fn nul_in_dollar_token_still_diverges() {
-    // Without the NUL the two implementations agree.
-    let (c_is, c_fp) = c_sqli(b"'$T");
-    let rust = libinjectionrs::detect_sqli(b"'$T");
-    let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
-    assert_eq!(
-        (rust.is_injection(), rust_fp.as_str()),
-        (c_is, c_fp.as_str()),
-        "'$T should agree; the NUL is what causes the divergence"
-    );
-
-    // With it, C emits a number token where this port emits a bareword.
-    let (c_is, c_fp) = c_sqli(b"'$\0T");
-    let rust = libinjectionrs::detect_sqli(b"'$\0T");
-    let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
-    assert_eq!(c_fp, "s1n", "C's fingerprint for '$\\0T changed");
-    assert_eq!(
-        rust_fp, "snn",
-        "this port's fingerprint for '$\\0T changed; if it is now s1n the class \
-         is fixed, so delete is_known_nul_divergence and this test"
-    );
-    let _ = c_is;
-
-    // Which turns a detected injection into a missed one.
-    let (c_is, _) = c_sqli(b"T'$\0T#");
-    let rust_is = libinjectionrs::detect_sqli(b"T'$\0T#").is_injection();
-    assert!(c_is, "C should flag T'$\\0T# as an injection");
-    assert!(
-        !rust_is,
-        "this port now flags T'$\\0T# too, so the class is fixed: delete \
-         is_known_nul_divergence and this test"
-    );
+fn nul_in_dollar_token_matches_the_c_library() {
+    for input in [&b"'$T"[..], b"'$\0T", b"T'$\0T#"] {
+        let (c_is, c_fp) = c_sqli(input);
+        let rust = libinjectionrs::detect_sqli(input);
+        let rust_fp = rust.fingerprint.as_ref().map(|f| f.to_string()).unwrap_or_default();
+        assert_eq!(
+            (rust.is_injection(), rust_fp.as_str()),
+            (c_is, c_fp.as_str()),
+            "{input:?} diverges from the C library"
+        );
+    }
+    // The specific behaviour: the NUL turns `$` into a number token.
+    assert_eq!(c_sqli(b"'$\0T").1, "s1n");
+    assert!(c_sqli(b"T'$\0T#").0, "C flags this injection, and so must the port");
 }

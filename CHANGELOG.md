@@ -23,8 +23,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The XSS event-handler check compares only the blacklisted event name's
   length, as C's `cstrcasecmp_with_null(black->name, s_without_on,
   strlen(black->name))` does, so an attribute-separator evasion like
-  `onerror%09=` matches on the `error` prefix. This retires the last known XSS
-  divergence class, bringing **XSS verdict divergences to 0** over the corpus.
+  `onerror%09=` matches on the `error` prefix. This brings **XSS verdict
+  divergences to 0** over the corpus.
+- `$`-token scanning now counts an embedded NUL as a member of any accept set,
+  as C's `strlenspn` does (its `strchr(accept, '\0')` finds the accept string's
+  terminator), so `'$\0T` scans `$\0` as a number and `T'$\0T#` is flagged.
+  This retires the last known divergence class: **no known divergence from the
+  C library remains** on SQLi or XSS.
 
 ### Added
 - `lookup_word_type`, a presence-aware keyword lookup returning `None` only
