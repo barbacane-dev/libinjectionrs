@@ -28,17 +28,18 @@ A vibe port (AI translation without manually reviewing much of the code) of the 
 Measured by `cargo test -p libinjection-comparison --test differential`.
 Each is a missed detection (a false negative).
 
-**SQLi fingerprints now match the C library exactly over the whole corpus**
-(0 divergences of 162,963). Multi-word keyword folding by table presence and a
-case-insensitive `INTO` whitelist check closed the last of what was ~1%.
+**SQLi fingerprints and XSS verdicts now match the C library exactly over the
+whole corpus** (0 divergences of 162,963 for each). Multi-word keyword folding
+by table presence, a case-insensitive `INTO` whitelist check, and a
+length-limited XSS event-handler check closed what was ~1% of SQLi and the XSS
+attribute-separator class.
 
 | Area | Symptom | Status |
 |---|---|---|
-| XSS | Whitespace or a control byte between an attribute name and its `=` is not recognised, as in `<img src=x onerror%09="alert(1)">`. | 14 verdict divergences |
 | SQLi | A NUL byte inside a `$`-prefixed token changes tokenization in C but not here: `'$\0T` fingerprints `s1n` in C and `snn` here, so `T'$\0T#` is an injection to C and clean here. Without the NUL both give `snn`. | pinned by a dedicated test |
 
-These are the classes characterised so far, not a complete list; the fuzz job
-keeps surfacing new ones, so it reports rather than gates.
+This is the one class characterised so far that remains; the fuzz job keeps
+surfacing new ones, so it reports rather than gates.
 
 ## Project Structure
 ```text

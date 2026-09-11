@@ -25,14 +25,11 @@ pub struct KnownDivergence {
 /// are added here.
 pub const KNOWN_SQLI_DIVERGENCES: &[KnownDivergence] = &[];
 
-/// Whitespace or a control byte between an attribute name and its `=`, as in
-/// `<img src=x onerror%09="alert(1)">`. The C library treats the separator as
-/// part of the attribute and flags the input; this port does not. A standard
-/// attribute-separator evasion.
-pub const KNOWN_XSS_DIVERGENCES: &[KnownDivergence] = &[KnownDivergence {
-    marker: "onerror%",
-    reason: "a separator between attribute name and '=' is not recognised",
-}];
+/// No XSS divergences from the C library remain over the corpus: the event
+/// handler check compares only the blacklisted event name's length, as C does,
+/// so `onerror%09` matches on `error`. New classes the fuzzer finds are added
+/// here.
+pub const KNOWN_XSS_DIVERGENCES: &[KnownDivergence] = &[];
 
 /// Which known class a text input belongs to, if any.
 pub fn known_class<'a>(

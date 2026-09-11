@@ -20,6 +20,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Together these bring **SQLi fingerprint divergences from the C library to 0**
   over the 162,963-input corpus (from 1,631, about 1%), retiring every known
   SQLi divergence class with no new divergence.
+- The XSS event-handler check compares only the blacklisted event name's
+  length, as C's `cstrcasecmp_with_null(black->name, s_without_on,
+  strlen(black->name))` does, so an attribute-separator evasion like
+  `onerror%09=` matches on the `error` prefix. This retires the last known XSS
+  divergence class, bringing **XSS verdict divergences to 0** over the corpus.
 
 ### Added
 - `lookup_word_type`, a presence-aware keyword lookup returning `None` only
