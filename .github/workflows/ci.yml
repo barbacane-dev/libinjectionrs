@@ -29,6 +29,48 @@ jobs:
       - name: Unit tests
         run: cargo test --workspace
 
+  coverage:
+    name: Library coverage
+    runs-on: ubuntu-latest
+    env:
+      # Floor on library line coverage. Raise it when the real number rises;
+      # never lower it to turn a red build green.
+      COVERAGE_FLOOR: "85"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+      - name: Measure coverage
+        run: |
+          cargo llvm-cov --no-report -p libinjectionrs --lib
+          cargo llvm-cov report --summary-only | tee coverage.txt
+          cargo llvm-cov report --lcov --output-path lcov.info
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo '### Library coverage'
+            echo
+            echo '```'
+            cat coverage.txt || echo '(no summary produced)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Enforce the coverage floor
+        run: cargo llvm-cov report --fail-under-lines "${COVERAGE_FLOOR}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-lcov
+          path: lcov.info
+          retention-days: 7
+
   differential:
     name: Differential against the C library
     runs-on: ubuntu-latest
