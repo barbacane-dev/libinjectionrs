@@ -12,6 +12,7 @@ libfuzzer-sys = "0.4"
 
 [dependencies.libinjectionrs]
 path = "../libinjectionrs"
+package = "barbacane-libinjection"
 
 [build-dependencies]
 bindgen = "0.69"

@@ -1,11 +1,11 @@
 [package]
-name = "libinjectionrs"
+name = "barbacane-libinjection"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-repository.workspace = true
-description = "Rust port of libinjection - SQL/XSS injection detection library"
+repository = "https://github.com/barbacane-dev/libinjectionrs"
+description = "A memory-safe Rust port of libinjection (SQL injection and XSS detection), differential-tested against the C library"
 readme = "README.md"
 keywords = ["security", "sql-injection", "xss", "detection", "web-security"]
 categories = ["web-programming", "parser-implementations"]

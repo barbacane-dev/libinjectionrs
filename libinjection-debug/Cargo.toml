@@ -8,7 +8,7 @@ description = "Comprehensive debugging tool for libinjection tokenization"
 [workspace]
 
 [dependencies]
-libinjectionrs = { path = "../libinjectionrs" }
+libinjectionrs = { path = "../libinjectionrs", package = "barbacane-libinjection" }
 clap = { version = "4.0", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

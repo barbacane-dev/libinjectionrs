@@ -23,7 +23,7 @@ harness = false
 path = "differential_bench.rs"
 
 [dependencies]
-libinjectionrs = { path = "../libinjectionrs" }
+libinjectionrs = { path = "../libinjectionrs", package = "barbacane-libinjection" }
 criterion.workspace = true
 
 [build-dependencies]
