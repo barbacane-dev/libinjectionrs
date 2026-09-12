@@ -49,7 +49,7 @@ jobs:
           tool: cargo-llvm-cov
       - name: Measure coverage
         run: |
-          cargo llvm-cov --no-report -p libinjectionrs --lib
+          cargo llvm-cov --no-report -p barbacane-libinjection --lib
           cargo llvm-cov report --summary-only | tee coverage.txt
           cargo llvm-cov report --lcov --output-path lcov.info
       - name: Publish summary
