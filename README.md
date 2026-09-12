@@ -20,9 +20,11 @@ The fixes that got here, each following the C control flow rather than a particu
 - multi-word keyword folding by table presence (`LOCK IN SHARE MODE`)
 - a case-insensitive `INTO` check in the three-token whitelist (`into outfile`)
 - a length-limited XSS event-handler check (`onerror%09=`)
-- a `strlenspn` that counts an embedded NUL as a set member, as C's `strchr` does
+- the `strchr`-over-a-literal family, where C counts an embedded NUL as a set member (its `strchr` finds the accept string's terminator): `strlenspn`/`strlencspn` in the number, money and variable scans, and NUL as whitespace in both `char_is_white` and the HTML5 `h5_is_white`
+- `sp_password` and the collate `_` check searched over the raw bytes, as C does, rather than a lossily decoded string
+- a variable token value stored without the leading `@`, so the function fold matches a name like `@pasSword`
 
-This is not the same as "provably identical". Beyond the corpus and these characterised edges, [differential fuzzing](#fuzzing) still finds new divergences, including false positives, within seconds. Treat this port as a close match with a measured gap of zero on the corpus, not as a drop-in replacement whose every answer is guaranteed.
+This is not the same as "provably identical", but the measured gap is small and shrinking. Over a two-hour differential-fuzzing campaign the SQLi detector found no divergence at all. The XSS detector's one finding was a bug in the C library rather than the port: an [ASan](https://clang.llvm.org/docs/AddressSanitizer.html)-confirmed out-of-bounds read in `htmlencode_startswith`, whose verdict then depends on whatever sits past the buffer. The FFI harness zero-pads the C input so that read is defined and the comparison is deterministic; the memory-safe port never reads past the input. Treat this port as a close match with a measured gap of zero on the corpus, not as a drop-in replacement whose every answer is guaranteed.
 
 ## Testing and CI
 
@@ -31,7 +33,7 @@ CI runs on every push and pull request:
 - **Lints and unit tests** across the workspace.
 - **Library coverage** (`cargo-llvm-cov`) with an enforced floor.
 - **Differential against the C library** — the job that matters, described above. A divergence fails it.
-- **Differential fuzzing** (two minutes per detector). It **reports rather than gates**: it still surfaces new divergence classes faster than they are fixed, so gating on it would mean either a red build forever or an exception list that excuses everything. The corpus differential is the gate; this job keeps new classes visible.
+- **Differential fuzzing** (two minutes per detector on each push, and a longer scheduled campaign). It **reports rather than gates**: a probabilistic run is a weak signal to block a merge on, so the corpus differential is the gate and this job keeps any new class visible. The C side runs through the zero-padded harness, so a divergence it reports is a genuine parse difference rather than C reading past the buffer.
 
 A separate test asserts that neither detector panics on adversarial input: every one- and two-byte value including NUL, random metacharacter strings, and 50,000-byte pathological repeats.
 

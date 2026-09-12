@@ -441,3 +441,25 @@ fn at_variable_named_like_a_function_matches_the_c_library() {
     assert_eq!(c_fp, "f(f(1", "C folds the variable to a function");
     assert!(c_is, "C flags this injection, and so must the port");
 }
+
+/// Guards an input on which libinjection's C code reads past the end of the
+/// buffer: an ASan-confirmed over-read in `htmlencode_startswith`, reached from
+/// `libinjection_is_xss`, on a URL-attribute value ending in an incomplete HTML
+/// entity. Past the buffer the bytes are indeterminate, so the C verdict is not
+/// reproducible across builds (it was `true` on the CI Linux build and `false`
+/// here) until the FFI harness zero-pads the input. With the padded harness the
+/// C answer is deterministic and the memory-safe port matches it. The differ-
+/// ential fuzzer found this because it compared against an unpadded C build.
+#[test]
+fn xss_over_read_input_matches_the_c_library_with_a_padded_buffer() {
+    let input: &[u8] = &[
+        0x22, 0x60, 0x3d, 0x27, 0x27, 0x58, 0x00, 0x54, 0x6f, 0x3d, 0x26, 0x23, 0x58, 0x00,
+        0x74, 0x6f, 0x5b, 0x26, 0x23, 0x58, 0x00, 0x74, 0x6f, 0x3d, 0x26, 0x23, 0x58, 0x00,
+        0x54, 0x6f, 0x3d, 0x26, 0x23, 0x58, 0x00, 0x74, 0x6f, 0x3d, 0x26, 0x23, 0x58,
+    ];
+    assert_eq!(
+        libinjectionrs::detect_xss(input).is_injection(),
+        c_xss(input),
+        "XSS over-read input diverges from the C library under the padded harness"
+    );
+}

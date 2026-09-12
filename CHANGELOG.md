@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   terminator), so `'$\0T` scans `$\0` as a number and `T'$\0T#` is flagged.
   This retires the last known divergence class: **no known divergence from the
   C library remains** on SQLi or XSS.
+- Further char-semantics classes the differential fuzzer surfaced, each fixed
+  following C: a variable name and the binary/hex/decimal number scans stop at
+  or consume a NUL as C's `strchr`-based helpers do; `sp_password` and the
+  collate `_` check search the raw token bytes rather than a lossily decoded
+  string; NUL counts as whitespace in the HTML5 tokenizer (`h5_is_white`), as
+  it does in C's `strchr(" \t\n\v\f\r", ch)`; and a variable token stores its
+  name without the leading `@`, so the function fold matches a name like
+  `@pasSword`. The SQLi detector then found no divergence over a two-hour
+  differential-fuzzing campaign.
 
 ### Added
 - `lookup_word_type`, a presence-aware keyword lookup returning `None` only
@@ -40,6 +49,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 - The differential fingerprint ceiling is lowered from 1,631 to 0: SQLi
   fingerprints now match the C library exactly across the corpus.
+- The FFI harness zero-pads the C input. libinjection reads a few bytes past
+  the end of the buffer on some adversarial inputs (an ASan-confirmed
+  out-of-bounds read in `htmlencode_startswith`, reached from
+  `libinjection_is_xss`), which makes its verdict depend on whatever sits past
+  the input. Padding makes those reads land on defined zero bytes, so the
+  differential compares against a deterministic C answer; the memory-safe port
+  never reads past the input.
 
 ## Baseline
 
