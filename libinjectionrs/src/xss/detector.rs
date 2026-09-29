@@ -397,7 +397,9 @@ impl XssDetector {
                 char_to_compare -= 0x20;
             }
 
-            if pattern[pattern_idx] as i32 != char_to_compare {
+            // C compares `*a != (char)cb`: only the low byte of the decoded
+            // code point counts, so `&#833;` (0x341) matches `A`.
+            if pattern[pattern_idx] != char_to_compare as u8 {
                 return false;
             }
 

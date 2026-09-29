@@ -463,3 +463,27 @@ fn xss_over_read_input_matches_the_c_library_with_a_padded_buffer() {
         "XSS over-read input diverges from the C library under the padded harness"
     );
 }
+
+/// Guards the numeric-entity comparison in `htmlencode_startswith`. C compares
+/// `*a != (char)cb`, so only the low byte of the decoded code point counts:
+/// `&#833` (0x341) matches `A` and `d&#833ta:` starts with `DATA`. The upcase
+/// runs on the full value first, so `&#353` (0x161, low byte `a`) matches
+/// nothing. The corpus has no out-of-range entities, so the fuzzer found this.
+#[test]
+fn numeric_entity_compares_by_its_low_byte_like_the_c_library() {
+    let inputs: [&[u8]; 4] = [
+        b"\"\0TO=D&#833TA33O=D&#84149533",
+        b"<x to=\"d&#833ta:x\">",
+        b"<a href=\"j&#321;va&#9793;cript:x\">",
+        b"<x to=\"d&#353ta:x\">",
+    ];
+    for input in inputs {
+        assert_eq!(
+            libinjectionrs::detect_xss(input).is_injection(),
+            c_xss(input),
+            "{input:?} diverges from the C library"
+        );
+    }
+    assert!(c_xss(b"<x to=\"d&#833ta:x\">"), "C flags this XSS, and so must the port");
+    assert!(!c_xss(b"<x to=\"d&#353ta:x\">"), "C upcases before truncating, so this is safe");
+}
