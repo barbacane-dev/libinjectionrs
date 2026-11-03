@@ -1180,11 +1180,9 @@ impl<'a> SqliTokenizer<'a> {
             }
         }
         
-        // Check for invalid exponential format
-        if have_e && !have_exp {
-            let token = &self.input[start_pos..end_pos];
-            self.current.assign(TYPE_BAREWORD, start_pos, end_pos - start_pos, token);
-        } else {
+        // "1234.e", "10.10E", ".E": MySQL ignores these, so no token is
+        // assigned and the tokenizer moves past them as it does whitespace.
+        if !(have_e && !have_exp) {
             let token = &self.input[start_pos..end_pos];
             self.current.assign(TYPE_NUMBER, start_pos, end_pos - start_pos, token);
         }

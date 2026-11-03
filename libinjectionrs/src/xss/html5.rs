@@ -142,14 +142,14 @@ impl<'a> Html5State<'a> {
         None
     }
     
-    // Match C h5_skip_white exactly: includes 0x00 for IE compatibility
-    // CRITICAL: C uses signed char, so any byte >= 128 becomes negative and is returned as-is
-    fn h5_skip_white(&mut self) -> Option<i8> {
+    // Match C h5_skip_white exactly: includes 0x00 for IE compatibility.
+    // Returns the next non-whitespace byte as unsigned, or None for CHAR_EOF,
+    // so a 0xFF byte is an ordinary byte, not end of input.
+    fn h5_skip_white(&mut self) -> Option<u8> {
         while self.pos < self.len {
-            let ch_unsigned = self.s[self.pos];
-            let ch_signed = ch_unsigned as i8;  // Convert to signed like C does: char ch = hs->s[hs->pos]
-            
-            match ch_signed {
+            let ch = self.s[self.pos];  // ch = (unsigned char)hs->s[hs->pos]
+
+            match ch {
                 0x00 | 0x20 | 0x09 | 0x0A => {  // case 0x00, case 0x20, etc.
                     self.pos += 1;
                 }
@@ -157,14 +157,11 @@ impl<'a> Html5State<'a> {
                     self.pos += 1;
                 }
                 _ => {
-                    // default: return ch;
-                    // In C, this returns the signed char value
-                    // For 0xFF, this returns -1 (CHAR_EOF)
-                    return Some(ch_signed);
+                    return Some(ch);  // default: return ch;
                 }
             }
         }
-        Some(-1)  // CHAR_EOF
+        None  // CHAR_EOF
     }
 
     fn find_byte(&self, byte: u8, start: usize) -> Option<usize> {
@@ -453,8 +450,8 @@ impl<'a> Html5State<'a> {
         // Manual tail call optimization loop
         loop {
             match self.h5_skip_white() {
-                Some(-1) => return false, // CHAR_EOF
-                Some(0x2f) => { // CHAR_SLASH (47 as i8)
+                None => return false, // CHAR_EOF
+                Some(0x2f) => { // CHAR_SLASH
                     self.advance();
                     // Tail call optimization: if next char is not '>', loop instead of recursing
                     if self.pos < self.len && self.s[self.pos] != b'>' {
@@ -462,7 +459,7 @@ impl<'a> Html5State<'a> {
                     }
                     return self.state_self_closing_start_tag();
                 }
-                Some(0x3e) => { // CHAR_GT (62 as i8)
+                Some(0x3e) => { // CHAR_GT
                     self.set_token(TokenType::TagNameClose, self.pos, 1);
                     self.advance();
                     self.state_fn = Self::state_data;
@@ -472,7 +469,6 @@ impl<'a> Html5State<'a> {
                     self.state_fn = Self::state_attribute_name;
                     return self.next();
                 }
-                None => return false, // Should not happen with new implementation
             }
         }
     }
@@ -520,29 +516,28 @@ impl<'a> Html5State<'a> {
     fn state_after_attribute_name(&mut self) -> bool {
         // Match C implementation exactly line by line
         match self.h5_skip_white() {  // c = h5_skip_white(hs)
-            Some(-1) => false,  // case CHAR_EOF: return 0
-            Some(0x2f) => {  // case CHAR_SLASH (47 as i8)
+            None => false,  // case CHAR_EOF: return 0
+            Some(0x2f) => {  // case CHAR_SLASH
                 self.pos += 1;  // hs->pos += 1
                 self.state_self_closing_start_tag()  // return h5_state_self_closing_start_tag(hs)
             }
-            Some(0x3d) => {  // case CHAR_EQUALS (61 as i8)
+            Some(0x3d) => {  // case CHAR_EQUALS
                 self.pos += 1;  // hs->pos += 1
                 self.state_before_attribute_value()  // return h5_state_before_attribute_value(hs)
             }
-            Some(0x3e) => {  // case CHAR_GT (62 as i8)
+            Some(0x3e) => {  // case CHAR_GT
                 self.state_tag_name_close()  // return h5_state_tag_name_close(hs)
             }
             Some(_) => {  // default
                 self.state_attribute_name()  // return h5_state_attribute_name(hs)
             }
-            None => false,  // Should not happen with new implementation
         }
     }
 
     fn state_before_attribute_value(&mut self) -> bool {
         // Match C implementation exactly: c = h5_skip_white(hs)
         match self.h5_skip_white() {
-            Some(-1) => {  // case CHAR_EOF
+            None => {  // case CHAR_EOF
                 self.state_fn = Self::state_eof;
                 false
             }
@@ -550,10 +545,6 @@ impl<'a> Html5State<'a> {
             Some(0x27) => self.state_attribute_value_single_quote(),  // CHAR_SINGLE (39)
             Some(0x60) => self.state_attribute_value_back_quote(),    // CHAR_TICK (96)
             Some(_) => self.state_attribute_value_no_quote(),         // default
-            None => {  // Should not happen with new implementation
-                self.state_fn = Self::state_eof;
-                false
-            }
         }
     }
 

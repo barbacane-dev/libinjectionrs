@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Opens a PR when libinjection moves, so the differential job runs the port
+  # against the new C code.
+  - package-ecosystem: gitsubmodule
+    directory: /
+    schedule:
+      interval: weekly

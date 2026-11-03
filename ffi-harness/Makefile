@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99 -O3 -fno-omit-frame-pointer -g -fPIC -DLIBINJECTION_VERSION=\"3.10.0\"
+CFLAGS = -Wall -Wextra -std=c99 -O3 -fno-omit-frame-pointer -g -fPIC
 INCLUDES = -I../libinjection-c/src
 SRCDIR = ../libinjection-c/src
 OBJDIR = obj
