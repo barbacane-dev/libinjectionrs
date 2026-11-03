@@ -87,4 +87,3 @@ The Makefile uses:
 - `-O3` - Optimization level 3
 - `-g` - Debug information
 - `-fno-omit-frame-pointer` - Keep frame pointers for debugging
-- `-DLIBINJECTION_VERSION="3.10.0"` - Version definition

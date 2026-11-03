@@ -630,7 +630,13 @@ impl<'a> SqliState<'a> {
                           let val = self.token_vec[left].value_as_str();
                           self.cstrcasecmp("LIKE", val) == 0 || self.cstrcasecmp("NOT LIKE", val) == 0
                       } {
-                if self.token_vec[left + 1].token_type == TokenType::LeftParenthesis {
+                if self.token_vec[left + 1].token_type == TokenType::LeftParenthesis &&
+                   !(left > 0 &&
+                     (self.token_vec[left - 1].token_type == TokenType::Number ||
+                      self.token_vec[left - 1].token_type == TokenType::String ||
+                      self.token_vec[left - 1].token_type == TokenType::Bareword ||
+                      self.token_vec[left - 1].token_type == TokenType::Variable ||
+                      self.token_vec[left - 1].token_type == TokenType::RightParenthesis)) {
                     // SELECT LIKE(...  - it's a function
                     self.token_vec[left].token_type = TokenType::Function;
                 }

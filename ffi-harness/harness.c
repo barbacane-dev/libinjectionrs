@@ -5,13 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-// libinjection reads a few bytes past the end of the input on some adversarial
-// inputs (an ASan-confirmed over-read in htmlencode_startswith, reached from
-// libinjection_is_xss). Past the buffer the bytes are indeterminate, so the
-// verdict is not reproducible across builds. Copy the input into a zeroed,
-// over-allocated buffer so any such read lands on defined zero bytes and the
-// C result is deterministic. The differential then compares against a stable
-// C answer rather than stack garbage.
+// Copy the input into a zeroed, over-allocated buffer so that any read past
+// input_len lands on defined zero bytes and the C verdict is deterministic.
 #define HARNESS_PAD 16
 
 static char* padded_copy(const char* input, size_t input_len) {

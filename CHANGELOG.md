@@ -45,8 +45,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   table keeps the behaviour.
 - A line-coverage gate in CI (`cargo-llvm-cov`), enforcing a floor on the
   library.
+- Dependabot watches the `libinjection-c` submodule, so upstream changes open
+  a pull request that the differential job runs against.
 
 ### Changed
+- The C reference is libinjection 4.0.1. The `libinjection-c` submodule had
+  been pinned at 85e252a (February 2025) since the port began. The port follows
+  the detection changes since then:
+  - A number like `1.e` or `10.E` with no exponent digits produces no token,
+    as MySQL ignores it, so `1' or 1.e(1)` folds and is flagged as in C.
+  - `LIKE (` is read as a function only when it does not follow an operand
+    (number, string, bareword, variable or `)`).
+  - The HTML5 tokenizer reads bytes unsigned when skipping whitespace, so a
+    0xFF byte is no longer taken as end of input and attributes after it are
+    checked.
+  - The XSS event-handler list follows upstream's 432 entries (145 added, 11
+    removed).
+  - `html_decode_char_at` and the event-handler comparison mirror 4.0.1's
+    length guards. Verdicts are unchanged.
+
+  4.0.0 fixed the `htmlencode_startswith` over-read described below; the
+  harness keeps the zero padding. Over the corpus, now 163,275 inputs, SQLi and
+  XSS divergences from the C library remain at 0.
 - The differential fingerprint ceiling is lowered from 1,631 to 0: SQLi
   fingerprints now match the C library exactly across the corpus.
 - The FFI harness zero-pads the C input. libinjection reads a few bytes past

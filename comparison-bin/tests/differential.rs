@@ -410,15 +410,26 @@ fn nul_in_number_literal_matches_the_c_library() {
 /// would. The text corpus has no NUL bytes, so only the fuzzer reaches this.
 #[test]
 fn nul_as_whitespace_in_html5_matches_the_c_library() {
-    // A NUL inside an attribute name: C ends the name there, so the trailing
-    // `</`+backtick never becomes a comment. The port must not flag it either.
-    let input: &[u8] = &[60, 0, 47, 50, 0, 255, 62, 60, 47, 96];
+    // A NUL ends the unquoted value `y`, so `onclick` after it is a new
+    // attribute, which C flags.
+    let input: &[u8] = b"<a x=y\0onclick=alert(1)>";
     assert_eq!(
         libinjectionrs::detect_xss(input).is_injection(),
         c_xss(input),
         "NUL-as-whitespace in HTML5 diverges from the C library"
     );
-    assert!(!c_xss(input), "C treats this as safe, and so must the port");
+    assert!(c_xss(input), "C flags the onclick after the NUL, and so must the port");
+
+    // Fuzz-found: the NUL ends the attribute name `2`, the 0xFF after it is a
+    // second attribute name, and the trailing `</`+backtick is a bogus comment
+    // containing a backtick, which C flags.
+    let input: &[u8] = &[60, 0, 47, 50, 0, 255, 62, 60, 47, 96];
+    assert_eq!(
+        libinjectionrs::detect_xss(input).is_injection(),
+        c_xss(input),
+        "NUL and 0xFF in HTML5 diverge from the C library"
+    );
+    assert!(c_xss(input), "C flags the backtick comment, and so must the port");
 }
 
 /// Guards the variable token value: C stores the name without the leading `@`
@@ -442,16 +453,11 @@ fn at_variable_named_like_a_function_matches_the_c_library() {
     assert!(c_is, "C flags this injection, and so must the port");
 }
 
-/// Guards an input on which libinjection's C code reads past the end of the
-/// buffer: an ASan-confirmed over-read in `htmlencode_startswith`, reached from
-/// `libinjection_is_xss`, on a URL-attribute value ending in an incomplete HTML
-/// entity. Past the buffer the bytes are indeterminate, so the C verdict is not
-/// reproducible across builds (it was `true` on the CI Linux build and `false`
-/// here) until the FFI harness zero-pads the input. With the padded harness the
-/// C answer is deterministic and the memory-safe port matches it. The differ-
-/// ential fuzzer found this because it compared against an unpadded C build.
+/// Guards URL-attribute values ending in an incomplete hex entity (`&#X`):
+/// `html_decode_char_at` must not decode past the end of the value, and the
+/// verdict must match the C library.
 #[test]
-fn xss_over_read_input_matches_the_c_library_with_a_padded_buffer() {
+fn xss_trailing_incomplete_hex_entity_matches_the_c_library() {
     let input: &[u8] = &[
         0x22, 0x60, 0x3d, 0x27, 0x27, 0x58, 0x00, 0x54, 0x6f, 0x3d, 0x26, 0x23, 0x58, 0x00,
         0x74, 0x6f, 0x5b, 0x26, 0x23, 0x58, 0x00, 0x74, 0x6f, 0x3d, 0x26, 0x23, 0x58, 0x00,
@@ -460,8 +466,22 @@ fn xss_over_read_input_matches_the_c_library_with_a_padded_buffer() {
     assert_eq!(
         libinjectionrs::detect_xss(input).is_injection(),
         c_xss(input),
-        "XSS over-read input diverges from the C library under the padded harness"
+        "XSS input ending in an incomplete hex entity diverges from the C library"
     );
+}
+
+/// Guards `h5_skip_white` returning the byte unsigned: a 0xFF before an
+/// attribute is an ordinary byte, so the `onfocus` handler after it is seen.
+#[test]
+fn xss_0xff_byte_before_an_attribute_matches_the_c_library() {
+    let input: &[u8] = b"<input \xff onfocus=alert(1)>";
+    let c_is = c_xss(input);
+    assert_eq!(
+        libinjectionrs::detect_xss(input).is_injection(),
+        c_is,
+        "0xFF before an attribute diverges from the C library"
+    );
+    assert!(c_is, "C flags the onfocus handler after 0xFF, and so must the port");
 }
 
 /// Guards the numeric-entity comparison in `htmlencode_startswith`. C compares
@@ -486,4 +506,37 @@ fn numeric_entity_compares_by_its_low_byte_like_the_c_library() {
     }
     assert!(c_xss(b"<x to=\"d&#833ta:x\">"), "C flags this XSS, and so must the port");
     assert!(!c_xss(b"<x to=\"d&#353ta:x\">"), "C upcases before truncating, so this is safe");
+}
+
+/// Fuzz-found XSS inputs containing 0xFF bytes. The verdict depends on
+/// `h5_skip_white` treating 0xFF as an ordinary byte, so it must match C.
+#[test]
+fn xss_fuzz_inputs_with_0xff_bytes_match_the_c_library() {
+    let inputs: [&[u8]; 2] = [
+        // crash-472cde1c76cb772c42c53bf83e5bfe071f009983
+        &[
+            47, 93, 34, 47, 93, 34, 96, 214, 45, 53, 32, 47, 62, 60, 116, 255, 102, 102, 102, 102,
+            39, 96, 10, 39, 10, 90, 127, 60, 112, 10, 120, 96, 170, 84, 40, 47, 60, 39, 61, 255,
+            62, 96, 47, 60, 33, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105,
+            105, 105, 105, 61, 39, 212, 61, 61, 39, 13, 116, 255, 255, 255, 255, 255, 255, 255,
+            255, 255, 102, 102, 102, 102, 102, 255, 52, 39, 167, 1, 61, 96, 96, 47, 13, 96, 39,
+            45, 53, 32, 47, 62, 60, 116, 255, 102, 102, 102, 102, 102, 91, 102, 96, 102, 102, 102,
+            39, 167, 1, 61, 96, 96, 47, 13,
+        ],
+        // 8ce9746b
+        &[
+            60, 112, 60, 112, 10, 47, 96, 2, 34, 96, 47, 13, 60, 47, 13, 13, 13, 96, 47, 84, 111,
+            47, 255, 67, 32, 32, 62, 132, 1, 60, 112, 10, 47, 96, 2, 34, 96, 32, 32, 62, 1, 60,
+            112, 62, 137, 125, 13, 60, 47, 13, 60, 47, 13, 13, 13, 96, 96, 32, 62, 132, 1, 60,
+            112, 10, 47, 96, 2, 34, 96, 32, 34,
+        ],
+    ];
+    for input in inputs {
+        let c_is = c_xss(input);
+        assert_eq!(
+            libinjectionrs::detect_xss(input).is_injection(),
+            c_is,
+            "fuzz input with 0xFF bytes diverges from the C library: {input:?}"
+        );
+    }
 }

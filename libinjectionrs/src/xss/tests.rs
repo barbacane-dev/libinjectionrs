@@ -47,8 +47,9 @@ fn test_style_attribute() {
 
 #[test]
 fn test_fuzz_differential_8ce9746b() {
-    // Fuzz test case where Rust returns true (XSS) but C returns false (safe)
-    // Input: "<p<p\n/`\u{2}\"`/\r</\r\r\r`/To/�C  >�\u{1}<p\n/`\u{2}\"`  >\u{1}<p>�}\r</\r</\r\r\r`` >�\u{1}<p\n/`\u{2}\"` \""
+    // Fuzz-found input with a 0xFF byte; C flags it as XSS because 0xFF is an
+    // ordinary byte to h5_skip_white (checked against C in comparison-bin).
+    // Input:"<p<p\n/`\u{2}\"`/\r</\r\r\r`/To/�C  >�\u{1}<p\n/`\u{2}\"`  >\u{1}<p>�}\r</\r</\r\r\r`` >�\u{1}<p\n/`\u{2}\"` \""
     let input = &[
         60, 112, 60, 112, 10, 47, 96, 2, 34, 96, 47, 13, 60, 47, 13, 13, 13, 96, 47, 84, 111, 
         47, 255, 67, 32, 32, 62, 132, 1, 60, 112, 10, 47, 96, 2, 34, 96, 32, 32, 62, 1, 60, 
@@ -56,9 +57,7 @@ fn test_fuzz_differential_8ce9746b() {
         112, 10, 47, 96, 2, 34, 96, 32, 34
     ];
     let detector = XssDetector::new();
-    // This test currently fails - Rust returns Xss but C returns Safe
-    // We expect it to return Safe to match C behavior
-    assert_eq!(detector.detect(input), XssResult::Safe);
+    assert_eq!(detector.detect(input), XssResult::Xss);
 }
 
 #[test]
@@ -113,8 +112,9 @@ fn test_multiple_contexts() {
 
 #[test]
 fn test_fuzz_differential_crash_472cde1c() {
-    // Fuzz test case where Rust returns true (XSS) but C returns false (safe)  
-    // From fuzz crash: crash-472cde1c76cb772c42c53bf83e5bfe071f009983
+    // Fuzz-found input with 0xFF bytes; C flags it as XSS because 0xFF is an
+    // ordinary byte to h5_skip_white (checked against C in comparison-bin).
+    // From fuzz crash:crash-472cde1c76cb772c42c53bf83e5bfe071f009983
     // Input bytes: [47, 93, 34, 47, 93, 34, 96, 214, 45, 53, 32, 47, 62, 60, 116, 255, 102, 102, 102, 102, 39, 96, 10, 39, 10, 90, 127, 60, 112, 10, 120, 96, 170, 84, 40, 47, 60, 39, 61, 255, 62, 96, 47, 60, 33, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 61, 39, 212, 61, 61, 39, 13, 116, 255, 255, 255, 255, 255, 255, 255, 255, 255, 102, 102, 102, 102, 102, 255, 52, 39, 167, 1, 61, 96, 96, 47, 13, 96, 39, 45, 53, 32, 47, 62, 60, 116, 255, 102, 102, 102, 102, 102, 91, 102, 96, 102, 102, 102, 39, 167, 1, 61, 96, 96, 47, 13]
     let input = &[
         47, 93, 34, 47, 93, 34, 96, 214, 45, 53, 32, 47, 62, 60, 116, 255, 102, 102, 102, 102, 
@@ -126,9 +126,7 @@ fn test_fuzz_differential_crash_472cde1c() {
         39, 167, 1, 61, 96, 96, 47, 13
     ];
     let detector = XssDetector::new();
-    // This test currently fails - Rust returns Xss but C returns Safe
-    // We expect it to return Safe to match C behavior
-    assert_eq!(detector.detect(input), XssResult::Safe);
+    assert_eq!(detector.detect(input), XssResult::Xss);
 }
 
 #[test]
@@ -227,3 +225,21 @@ fn test_fuzz_differential_070fdf5c() {
 }
 
 
+
+#[test]
+fn test_0xff_byte_is_not_end_of_input() {
+    // Mirrors libinjection's test_error_handling.c: h5_skip_white returns the
+    // byte unsigned, so a 0xFF before an attribute does not end the tag scan.
+    use super::html5::{Html5Flags, Html5State, TokenType};
+
+    let input: &[u8] = b"<input \xff onfocus=alert(1)>";
+    let mut h5 = Html5State::new(input, Html5Flags::DataState);
+    let mut saw_attr = false;
+    while h5.next() {
+        if h5.token_type == TokenType::AttrName && &h5.token_start[..h5.token_len] == b"onfocus" {
+            saw_attr = true;
+        }
+    }
+    assert!(saw_attr, "the onfocus attribute after 0xFF must be tokenized");
+    assert_eq!(XssDetector::new().detect(input), XssResult::Xss);
+}
