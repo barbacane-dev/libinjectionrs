@@ -1,5 +1,7 @@
 // SQL injection blacklist checker - matches C implementation exactly
 
+use alloc::string::String;
+
 use super::sqli_data;
 
 /// Check if a fingerprint is blacklisted

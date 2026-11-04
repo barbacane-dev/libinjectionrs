@@ -136,7 +136,7 @@ impl Token {
         let end = self.len.min(32);
         // For display purposes, show lossy conversion to handle 0xFF bytes
         // This won't affect tokenization logic, only debugging output
-        std::str::from_utf8(&self.val[..end]).unwrap_or("<binary>")
+        core::str::from_utf8(&self.val[..end]).unwrap_or("<binary>")
     }
     
     pub fn clear(&mut self) {
@@ -482,7 +482,7 @@ impl<'a> SqliTokenizer<'a> {
         // Try 2-character operator lookup using the comprehensive table
         // Only attempt lookup if bytes form valid UTF-8, since operators are ASCII-only
         let two_char = &self.input[pos..pos + 2];
-        if let Ok(two_char_str) = std::str::from_utf8(two_char) {
+        if let Ok(two_char_str) = core::str::from_utf8(two_char) {
             let token_type = self.lookup_word(two_char_str);
             if token_type != TokenType::None && token_type != TokenType::Bareword {
                 // Found a 2-character operator in the lookup table
@@ -920,7 +920,7 @@ impl<'a> SqliTokenizer<'a> {
                 // form a valid keyword. Since libinjection keywords are ASCII-only,
                 // if the slice contains any non-UTF8 bytes (like 0xFF), it can't be 
                 // a keyword anyway, so we can safely skip the lookup.
-                if let Ok(partial_word) = std::str::from_utf8(&word_slice[..i]) {
+                if let Ok(partial_word) = core::str::from_utf8(&word_slice[..i]) {
                     let token_type = self.lookup_word(partial_word);
                     if token_type != TokenType::None && token_type != TokenType::Bareword {
                         self.current.clear();
@@ -935,7 +935,7 @@ impl<'a> SqliTokenizer<'a> {
         
         // Do full word lookup - only for valid UTF-8 sequences since keywords are ASCII-only
         if word_len < LIBINJECTION_SQLI_TOKEN_SIZE {
-            if let Ok(word_str) = std::str::from_utf8(word_slice) {
+            if let Ok(word_str) = core::str::from_utf8(word_slice) {
                 let token_type = self.lookup_word(word_str);
                 if token_type != TokenType::None {
                     self.current.token_type = token_type;
@@ -952,7 +952,7 @@ impl<'a> SqliTokenizer<'a> {
         let pos = self.parse_string_core(self.pos, CHAR_TICK, 1);
         
         // Check if backtick content is a keyword/function - only for valid UTF-8
-        if let Ok(word_str) = std::str::from_utf8(&self.current.val[..self.current.len]) {
+        if let Ok(word_str) = core::str::from_utf8(&self.current.val[..self.current.len]) {
             let token_type = self.lookup_word(word_str);
             if token_type == TokenType::Function {
                 self.current.token_type = TokenType::Function;

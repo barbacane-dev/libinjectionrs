@@ -80,9 +80,8 @@ impl XssDetector {
 - No panics in normal operation
 
 ### 4. Feature Flags
-- `std` (default): Standard library support
-- `smallvec`: Optimize small allocations
-- `no_std`: Core-only operation with optional `alloc`
+- `std` (default): implements `std::error::Error` for `Error`. Without it the crate is `no_std` and needs `alloc`.
+- `smallvec` (default): stores tokens in a `SmallVec` instead of a `Vec`
 
 ### 5. Token Representation
 

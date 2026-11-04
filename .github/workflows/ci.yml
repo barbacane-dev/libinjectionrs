@@ -29,6 +29,22 @@ jobs:
       - name: Unit tests
         run: cargo test --workspace
 
+  no-std:
+    name: Build without std
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: thumbv7em-none-eabihf
+      - uses: Swatinem/rust-cache@v2
+      # A bare-metal target has no std, so any use of it, in the crate or a
+      # dependency, fails the build.
+      - name: Without std
+        run: cargo build -p barbacane-libinjection --no-default-features --target thumbv7em-none-eabihf
+      - name: Without std, with smallvec
+        run: cargo build -p barbacane-libinjection --no-default-features --features smallvec --target thumbv7em-none-eabihf
+
   coverage:
     name: Library coverage
     runs-on: ubuntu-latest
