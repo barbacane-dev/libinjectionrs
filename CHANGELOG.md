@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-04
+
+### Fixed
+- The crate builds without the `std` feature. The SQLi tokenizer called
+  `std::str::from_utf8`, and `Vec`, `String` and `format!` were used without
+  importing them from `alloc`, so a `no_std` build failed
+  ([saarw/libinjectionrs#2](https://github.com/saarw/libinjectionrs/issues/2)).
+  Detection is unchanged.
+
+### Added
+- A CI job builds the crate for a bare-metal target (`thumbv7em-none-eabihf`)
+  without `std`, with and without `smallvec`.
+
 ## [0.1.2] - 2026-11-03
 
 ### Fixed
