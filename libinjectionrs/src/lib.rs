@@ -35,7 +35,6 @@
 //! Most applications should **not** use these lower-level APIs unless they have
 //! specific requirements that the high-level functions cannot meet.
 
-#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 use core::fmt;

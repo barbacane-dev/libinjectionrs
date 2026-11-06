@@ -8,12 +8,13 @@ A memory-safe Rust port of [libinjection](https://github.com/libinjection/libinj
 - XSS detection with context awareness
 - No `unsafe`, and lints that deny the common panic sources (see [Linting](#linting))
 - Minimal heap allocations using `SmallVec`
+- `no_std` support: with `default-features = false` the crate needs only `core` and `alloc`
 
 ## Agreement with the C library
 
 Correctness here means one thing: the same answer as the C library. That is measured, not asserted, by `comparison-bin/tests/differential.rs`, which links the C sources through the FFI harness and compares this port against them over libinjection's own corpus of ~163,000 inputs, on both verdicts and fingerprints.
 
-**No known divergence from the C library remains.** SQLi fingerprints and XSS verdicts match exactly across the whole corpus (0 of 162,963 each), and the NUL-in-`$`-token edge, which the text corpus cannot reach, is matched too and held by a dedicated test. Any divergence outside this state fails the build.
+**No known divergence from the C library remains.** SQLi fingerprints and XSS verdicts match exactly across the whole corpus (0 of 163,275 each), and the NUL-in-`$`-token edge, which the text corpus cannot reach, is matched too and held by a dedicated test. Any divergence outside this state fails the build.
 
 The fixes that got here, each following the C control flow rather than a particular input:
 

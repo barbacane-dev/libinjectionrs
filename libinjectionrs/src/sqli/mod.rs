@@ -1,3 +1,7 @@
+use alloc::format;
+use alloc::string::{String, ToString};
+#[cfg(not(feature = "smallvec"))]
+use alloc::vec::Vec;
 use core::ops::{Deref, BitOr, BitOrAssign};
 
 #[cfg(feature = "smallvec")]
